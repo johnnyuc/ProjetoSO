@@ -67,9 +67,8 @@ ConfigValues config_loader(const char* filepath) {
     return values;
 }
 
-
 // Logger function
-void logger(const char* message) {
+void log_writer(const char* message) {
     // If the log file is being written to, wait until it's done
     // Mantains order of log messages, both printing to screen and writing to file
     pthread_mutex_lock(&log_mutex);

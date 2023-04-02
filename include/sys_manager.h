@@ -27,5 +27,6 @@ typedef struct {
 
 // Functions 
 ConfigValues config_loader(const char* filepath);
+void log_writer(const char* message)
 
 #endif //IOT_PROJECT_SYSTEM_MANAGER_H
