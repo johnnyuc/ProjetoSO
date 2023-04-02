@@ -1,6 +1,9 @@
-#ifndef SENSOR_HEADER_FILE_H
-#define SENSOR_HEADER_FILE_H
+/**********************************************
+* Author: António Silva e Johnny Fernandes    *
+* LEI UC 2022-23 - Sistemas Operativos        *
+**********************************************/
 
-void void_test_function();
+#ifndef IOT_PROJECT_SENSOR_H
+#define IOT_PROJECT_SENSOR_H
 
-#endif // SENSOR_HEADER_FILE_H
+#endif //IOT_PROJECT_SENSOR_H

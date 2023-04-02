@@ -3,6 +3,7 @@
 * LEI UC 2022-23 - Sistemas Operativos        *
 **********************************************/
 
-int main() {
-    return 0;
-}
+#ifndef IOT_PROJECT_USER_CONSOLE_H
+#define IOT_PROJECT_USER_CONSOLE_H
+
+#endif //IOT_PROJECT_USER_CONSOLE_H
