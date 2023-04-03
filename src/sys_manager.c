@@ -1,5 +1,6 @@
 /**********************************************
-* Author: António Silva e Johnny Fernandes    *
+* Author: António Silva 2020238160            *
+* Author: Johnny Fernandes 2021190668         *
 * LEI UC 2022-23 - Sistemas Operativos        *
 **********************************************/
 
@@ -86,71 +87,94 @@ ConfigValues config_loader(char* filepath) {
     return values;
 }
 
-void main_initializer() {
+// ---------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------
+// TESTES PARA CARALHO
 
-    // Create shared memory
-    
+    // METE AS MERDAS EM TODO ESTE BLOCO
 
-    // Create threads
-    pthread_t console_reader_thread, sensor_reader_thread, dispatcher_thread;
-    int rc;
+// Struct that represents the internal_queue
+typedef struct {
+        int read_pos, write_pos;
+        int count;
 
-    // create console reader thread
-    rc = pthread_create(&console_reader_thread, NULL, console_reader, NULL);
-    if (rc != 0) {
-        fprintf(stderr, "Error creating console reader thread: %s\n", strerror(rc));
-        exit(EXIT_FAILURE);
-    }
+        int internal_buffer[];
+} InternalQueue;
 
-    // create sensor reader thread
-    rc = pthread_create(&sensor_reader_thread, NULL, sensor_reader, NULL);
-    if (rc != 0) {
-        fprintf(stderr, "Error creating sensor reader thread: %s\n", strerror(rc));
-        exit(EXIT_FAILURE);
-    }
-
-    // create dispatcher thread
-    rc = pthread_create(&dispatcher_thread, NULL, dispatcher, NULL);
-    if (rc != 0) {
-        fprintf(stderr, "Error creating dispatcher thread: %s\n", strerror(rc));
-        exit(EXIT_FAILURE);
-    }
-
-    // wait for threads to finish
-    pthread_join(console_reader_thread, NULL);
-    pthread_join(sensor_reader_thread, NULL);
-    pthread_join(dispatcher_thread, NULL);
-
-    // Create worker processes
-    for (int i = 0; i < config_vals.nr_workers; i++) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            // Child process
-            worker();
-            exit(0);
-        } else if (pid < 0) {
-            // Error
-            sprintf(message, "Failed to create worker process. System manager now exiting...\n");
-            log_writer(message);
-            exit(1);
-        }
-    }
-
-    // // Create SENSOR_PIPE, permissions set at 666, write on sensor
-    // if ((mkfifo(SENSOR_PIPE, O_CREAT|O_EXCL|0666)<0) && (errno!= EEXIST)) {
-    //     perror("Cannot create pipe: ");
-    //     exit(0);
-    // }
-    
-    // // Creating CONSOLE_PIPE, permissions set at 666, write on user_console
-    // if ((mkfifo(CONSOLE_PIPE, O_CREAT|O_EXCL|0666)<0) && (errno!= EEXIST)) {
-    //     perror("Cannot create pipe: ");
-    //     exit(0);
-    // }
-
-    
-
+// Function that initializes internal_queue
+InternalQueue* queue_init() {
+    InternalQueue* q = malloc(sizeof(InternalQueue)+config_vals.queue_size*sizeof(int));
+    q->read_pos = 0;
+    q->write_pos = 0;
+    q->count = 0;
+    return q;
 }
+
+// Function that removes internal_queue
+void remove_queue(InternalQueue* q) {
+    free(q);
+}
+
+
+void queue_push(InternalQueue* q, int value) {
+    pthread_mutex_lock(&queue_mutex);
+    while (q->count == config_vals.queue_size) {
+        pthread_cond_wait(&queue_not_empty, &queue_mutex);
+    }
+    q->internal_buffer[q->write_pos] = value;
+    q->write_pos = (q->write_pos + 1) % config_vals.queue_size;
+    q->count++;
+    pthread_mutex_unlock(&queue_mutex);
+}
+
+void queue_pop(InternalQueue* q) {
+    pthread_mutex_lock(&queue_mutex);
+    while (q->count == 0) {
+        pthread_cond_wait(&queue_not_empty, &queue_mutex);
+    }
+    q->read_pos = (q->read_pos + 1) % config_vals.queue_size;
+    q->count--;
+    pthread_mutex_unlock(&queue_mutex);
+}
+
+void queue_print(InternalQueue* q) {
+    pthread_mutex_lock(&queue_mutex);
+    for (int i = 0; i < q->count; i++) {
+        printf("%d ", q->internal_buffer[(q->read_pos + i) % config_vals.queue_size]);
+    }
+    printf("\n");
+    pthread_mutex_unlock(&queue_mutex);
+}
+
+void main_initializer() {
+    // Initialize the internal_queue
+    InternalQueue* internal_queue = queue_init();
+    // Cenas
+    // Agora vamos testar aqui se a queue funciona ou o caralho
+
+    // Push 10 values to the queue
+    for (int i = 0; i < 10; i++) {
+        queue_push(internal_queue, i);
+    }
+
+    // Print the queue
+    queue_print(internal_queue);
+
+    // Pop 5 values from the queue
+    for (int i = 0; i < 5; i++) {
+        queue_pop(internal_queue);
+    }
+
+    // Print the queue
+    queue_print(internal_queue);
+
+    // Remove the internal_queue, should be called somewhere else
+    free(internal_queue);
+    
+}
+// ---------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------
+
 
 // Logger function
 void log_writer(char* message) {
@@ -183,80 +207,4 @@ void log_writer(char* message) {
     pthread_mutex_unlock(&log_writer_mutex);
 
     memset(message, 0, BUFFER_MESSAGE); // clears the message buffer
-}
-
-
-// CENAS
-
-void *sensor_reader(void *arg) {
-    int fd;
-    char buffer[BUFFER_MESSAGE];
-    int bytes_read;
-
-    fd = open(SENSOR_PIPE, O_RDONLY);
-
-    while(1) {
-        bytes_read = read(fd, buffer, BUFFER_MESSAGE);
-
-        if (bytes_read > 0) {
-            // Lock the queue_mutex to access the shared queue
-            pthread_mutex_lock(&queue_mutex);
-
-            // Add the message to the shared queue
-            enqueue(&queue, buffer);
-
-            // Unlock the queue_mutex to allow other threads to access the queue
-            pthread_mutex_unlock(&queue_mutex);
-        }
-    }
-
-    close(fd);
-    pthread_exit(NULL);
-}
-
-void *console_reader(void *arg) {
-    int fd;
-    char buffer[BUFFER_MESSAGE];
-    int bytes_read;
-
-    fd = open(CONSOLE_PIPE, O_RDONLY);
-
-    while(1) {
-        bytes_read = read(fd, buffer, BUFFER_MESSAGE);
-
-        if (bytes_read > 0) {
-            // Lock the queue_mutex to access the shared queue
-            pthread_mutex_lock(&queue_mutex);
-
-            // Add the message to the shared queue
-            enqueue(&queue, buffer);
-
-            // Unlock the queue_mutex to allow other threads to access the queue
-            pthread_mutex_unlock(&queue_mutex);
-        }
-    }
-
-    close(fd);
-    pthread_exit(NULL);
-}
-
-void* dispatcher(void* arg) {
-    int message;
-
-    while (1) {
-        // wait for queue to not be empty
-        pthread_mutex_lock(&queue_mutex);
-        while (config_vals.queue_size == 0) {
-            pthread_cond_wait(&queue_not_empty, &queue_mutex);
-        }
-
-        // remove message from queue
-        message = internal_queue[config_vals.queue_size-1];
-        config_vals.queue_size--;
-
-        pthread_mutex_unlock(&queue_mutex);
-
-        // dispatch message to worker processes
-        // ...
-    }
 }

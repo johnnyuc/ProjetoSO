@@ -1,5 +1,6 @@
 /**********************************************
-* Author: António Silva e Johnny Fernandes    *
+* Author: António Silva 2020238160            *
+* Author: Johnny Fernandes 2021190668         *
 * LEI UC 2022-23 - Sistemas Operativos        *
 **********************************************/
 
@@ -8,14 +9,11 @@
 
 // Includes
 #include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
+#include <stdio.h> // File manipulation, printf
+#include <string.h> // String manipulation, strtok
+#include <time.h> // Timestamp
 
-#include <pthread.h>
-#include <sys/stat.h> // mkfifo()
-#include <fcntl.h> // O_CREAT, O_EXCL
-#include <errno.h>
+#include <pthread.h> // Threads, mutexes and condition variables
 
 // Defines
 #define BUFFER_MESSAGE 256
@@ -33,11 +31,12 @@ typedef struct {
     int max_alerts;
 } ConfigValues;
 
+
+
+
 // Functions 
 ConfigValues config_loader(char* filepath);
+void main_initializer();
 void log_writer(char* message);
-
-void *sensor_reader(void *arg);
-void *console_reader(void *arg);
 
 #endif //IOT_PROJECT_SYSTEM_MANAGER_H
