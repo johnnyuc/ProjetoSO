@@ -10,11 +10,19 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+
 #include <pthread.h>
+#include <sys/stat.h> // mkfifo()
+#include <fcntl.h> // O_CREAT, O_EXCL
+#include <errno.h>
 
 // Defines
-#define BUFFER256 256
-#define CONFIG_PATH "config/config.txt"
+#define BUFFER_MESSAGE 256
+#define BUFFER_TIME 20
+#define SENSOR_PIPE "SENSOR_PIPE"
+#define CONSOLE_PIPE "CONSOLE_PIPE"
+#define LOG_PATH "logs/log_sys_manager.txt"
 
 // Structs
 typedef struct {
@@ -26,7 +34,10 @@ typedef struct {
 } ConfigValues;
 
 // Functions 
-ConfigValues config_loader(const char* filepath);
-void log_writer(const char* message)
+ConfigValues config_loader(char* filepath);
+void log_writer(char* message);
+
+void *sensor_reader(void *arg);
+void *console_reader(void *arg);
 
 #endif //IOT_PROJECT_SYSTEM_MANAGER_H

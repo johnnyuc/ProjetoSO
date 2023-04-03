@@ -10,7 +10,7 @@ SRCDIR = src
 BINDIR = bin
 
 # Program names
-PROG_SYS = sys_manager
+PROG_SYS = home_iot
 PROG_SENSOR = sensor
 PROG_CONSOLE = user_console
 

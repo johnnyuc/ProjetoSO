@@ -6,4 +6,7 @@
 #ifndef IOT_PROJECT_SENSOR_H
 #define IOT_PROJECT_SENSOR_H
 
+#define PIPE_NAME "SENSOR_PIPE"
+
+
 #endif //IOT_PROJECT_SENSOR_H
