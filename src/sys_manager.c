@@ -89,12 +89,10 @@ ConfigValues config_loader(char* filepath) {
 
 // ---------------------------------------------------------------------------------------------
 // ---------------------------------------------------------------------------------------------
-// TESTES PARA CARALHO
-
-    // METE AS MERDAS EM TODO ESTE BLOCO
+// TESTES
 
 // Struct that represents the internal_queue
-typedef struct {
+typedef struct InternalQueue {
         int read_pos, write_pos;
         int count;
 
@@ -115,7 +113,7 @@ void remove_queue(InternalQueue* q) {
     free(q);
 }
 
-
+// Function that pushes a value to the internal_queue
 void queue_push(InternalQueue* q, int value) {
     pthread_mutex_lock(&queue_mutex);
     while (q->count == config_vals.queue_size) {
@@ -127,6 +125,7 @@ void queue_push(InternalQueue* q, int value) {
     pthread_mutex_unlock(&queue_mutex);
 }
 
+// Function that pops/takes a value from the internal_queue
 void queue_pop(InternalQueue* q) {
     pthread_mutex_lock(&queue_mutex);
     while (q->count == 0) {
@@ -137,6 +136,7 @@ void queue_pop(InternalQueue* q) {
     pthread_mutex_unlock(&queue_mutex);
 }
 
+// Function that prints the internal_queue
 void queue_print(InternalQueue* q) {
     pthread_mutex_lock(&queue_mutex);
     for (int i = 0; i < q->count; i++) {
@@ -146,6 +146,7 @@ void queue_print(InternalQueue* q) {
     pthread_mutex_unlock(&queue_mutex);
 }
 
+// Function that initializes the internal_queue
 void main_initializer() {
     // Initialize the internal_queue
     InternalQueue* internal_queue = queue_init();

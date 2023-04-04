@@ -23,16 +23,13 @@
 #define LOG_PATH "logs/log_sys_manager.txt"
 
 // Structs
-typedef struct {
+typedef struct ConfigValues {
     int queue_size;
     int nr_workers;
     int max_shmkeys;
     int max_sensors;
     int max_alerts;
 } ConfigValues;
-
-
-
 
 // Functions 
 ConfigValues config_loader(char* filepath);

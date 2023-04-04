@@ -4,7 +4,7 @@
 
 #define QUEUE_SIZE 10
 
-typedef struct {
+typedef struct queue {
     int buffer[QUEUE_SIZE];
     pthread_mutex_t lock;
     int readpos, writepos;

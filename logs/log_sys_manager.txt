@@ -1,6 +1,0 @@
-[03/04/23 16:37:45] Invalid set of parameters. System manager now exiting...
-[03/04/23 16:37:53] Internal queue size: 10
-[03/04/23 16:37:53] Number of worker processes: 5
-[03/04/23 16:37:54] Max keys in SHM: 300
-[03/04/23 16:37:54] Max sensors: 10
-[03/04/23 16:37:54] Max alerts: 50
