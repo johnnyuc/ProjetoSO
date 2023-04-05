@@ -14,6 +14,14 @@
 #include <time.h> // Timestamp
 
 #include <pthread.h> // Threads, mutexes and condition variables
+#include <sys/shm.h> // Shared memory
+// #include <sys/stat.h> // File permissions
+// #include <sys/types.h> // File permissions
+// #include <sys/wait.h> // Waitpid
+// #include <unistd.h> // Fork, pipe, close, dup, exec, sleep
+// #include <fcntl.h> // File manipulation
+// #include <errno.h> // Error handling
+#include <sys/ipc.h> // Message queue
 
 // Defines
 #define BUFFER_MESSAGE 256
