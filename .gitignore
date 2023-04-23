@@ -1,1 +1,11 @@
-.vscode/
+# VSCode
+.vscode/*
+!.vscode/c_cpp_properties.json
+
+# bin
+bin/*
+!bin/.gitkeep
+
+# logs
+logs/*
+!logs/.gitkeep
