@@ -1,42 +1,54 @@
 /**********************************************
-* Autor: António Silva 2020238160            *
-* Autor: Johnny Fernandes 2021190668         *
+* Author: Johnny Fernandes 2021190668         *
 * LEI UC 2022-23 - Sistemas Operativos        *
 **********************************************/
 
 // Includes
 #include "sys_manager.h"
-#include "threads.h"
-#include "workers.h"
-#include "shared_memory.h"
-//#include "message_queue.h"
+#include "sys_threads.h"
+#include "sys_workers.h"
+#include "sys_alerts.h"
+#include "sys_shm.h"
 
-// Variáveis globais
-pthread_mutex_t log_writer_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t queue_not_empty = PTHREAD_COND_INITIALIZER;
-
-char message[BUFFER_MESSAGE];
+// Global variables
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 ConfigValues config_vals;
+SharedMemory *SHM;
 
-// Função de carregamento das configurações
+// Function to handle the SIGINT signal
+void handle_signint(int sig) {
+    // Tricky part:
+    // Careful about cleaning up resources like waiting for all threads to finish
+    // processes to finish, detaching access to shm, free calloc and then exit and write to log
+    remove_shm(SHM);
+    sprintf(message, "EXITING, CODE %d\n", sig);
+    log_writer(message);
+    pthread_mutex_destroy(&mutex);
+    exit(EXIT_SUCCESS);
+}
+
+// Loading config file values
 ConfigValues config_loader(char* filepath) {
     ConfigValues values = {0};
     FILE* config_file = fopen(filepath, "r");
-    if (config_file == NULL) {
-        printf("Failed to open config file. System manager now exiting...\n");
-        exit(1);
-    }
-    char line[BUFFER_MESSAGE];
-    int filler = 0;
-    while (fgets(line, sizeof(line), config_file)) {
-        char* token = strtok(line, " \t\r\n");  // para qualquer divisão de espaço
-        if (token == NULL) {
-            continue;  // pula linhas vazias, comentários e outros
-        }
-        int value = atoi(token);
 
-        // Incrementalmente preenche a estrutura de configuração
+    if (config_file == NULL) {
+        sprintf(message, "FAILED TO OPEN CONFIG FILE. EXITING\n");
+        log_writer(message);
+        exit(EXIT_FAILURE);
+    }
+    
+    int param_count = 0;
+    while (fgets(message, sizeof(message), config_file)) {
+        char* token = strtok(message, " \t\r\n");  // for each line, get the first token
+        if (token == NULL ||  token[0] == '#') {
+            continue;  // skip empty lines and comments
+        }
+
+        int value = atoi(token);
+        if (value == 0) continue;
+
+        // Fill the values struct with the values from the config file
         if (values.queue_size == 0) {
             values.queue_size = value;
         } else if (values.nr_workers == 0) {
@@ -48,79 +60,77 @@ ConfigValues config_loader(char* filepath) {
         } else if (values.max_alerts == 0) {
             values.max_alerts = value;
         }
-        filler++;
+        param_count++;
     }
 
-    // Verifica se todos os valores foram preenchidos devidamente
-    if (filler != 5) {
-        printf("Invalid config file. System manager now exiting...\n");
-        exit(1);
+    // Checks if the config file has the correct number of values
+    if (param_count != 5) {
+        sprintf(message, "INCORRECT CONFIG FILE PARAMS. EXITING\n");
+        log_writer(message);
+        exit(EXIT_FAILURE);
     }
 
     fclose(config_file);
     return values;
 }
 
-// Função de escrita em ficheiro log
+// Function to write to log file and to the screen
 void log_writer(char* message) {
-    // Se o ficheiro log estiver ocupado, não faz nada e aguarda
-    // Obriga a manter a ordem de escrita corretamente entre ecrã e log file
-    pthread_mutex_lock(&log_writer_mutex);
+    // If the mutex is locked, the thread will wait until it is unlocked
+    // Makes sure that only one thread can write to the log file at a time
+    // Also guarantees that the log file will be written to in the correct order
+    pthread_mutex_lock(&mutex);
 
-    // Timestamp - Vai buscar o tempo atual
+    // Timestamp format: dd/mm/yy hh:mm:ss
     // https://en.cppreference.com/w/c/chrono/strftime
     time_t now = time(NULL);
     struct tm* tm_info = localtime(&now);
 
-    // Formata o tempo como uma string
+    // Formats the timestamp
     char timestamp[BUFFER_TIME];
     strftime(timestamp, sizeof(timestamp), "%d/%m/%y %H:%M:%S", tm_info);
 
-    // Escreve a mensagem no ecrã (deve preceder a escrita em log)
+    // Writes the message to the screen
     printf("[%s] %s", timestamp, message);
 
-    // Escreve a mensagem no ficheiro log
+    // Writes the message to the log file
     FILE* log_file = fopen(LOG_PATH, "a");
     if (log_file == NULL) {
-        printf("LOG ERROR: Could not write to file!\n");
-        return;
+        printf("LOG ERROR: CANNOT WRITE TO LOG\n");
+        exit(EXIT_FAILURE);
     }
     fprintf(log_file, "[%s] %s", timestamp, message);
     fclose(log_file);
 
-    // Destranca o mutex
-    pthread_mutex_unlock(&log_writer_mutex);
-
-    memset(message, 0, BUFFER_MESSAGE); // limpa o buffer de mensagens
+    // Unlocks the mutex
+    pthread_mutex_unlock(&mutex);
+    memset(message, 0, BUFFER_MESSAGE); // clears the message buffer
 }
 
+// Main function to initialize the system manager
+void main_initializer() {
+    create_threads();
+    SHM = create_shm(config_vals.max_shmkeys, config_vals.max_alerts);
+    create_workers(config_vals.nr_workers, SHM->shmid);
+    create_watcher(SHM->shmid);
+}
 
-// Função Main
+// Main function
 int main(int argc, char *argv[]) {
-    // Verifica se o número correto de parâmetors foi passado
+    char message[BUFFER_MESSAGE];
+    // Verifies if the config file path was passed as a parameter
     if (argc != 2) {
-        char message[BUFFER_MESSAGE];
-        sprintf(message, "Invalid set of parameters. System manager now exiting...\n");
+        sprintf(message, "INVALID CONFIG ARGUMENT ON START. EXITING\n");
         log_writer(message);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
+    sprintf(message, "HOME_IOT SIMULATOR STARTING\n");
+    log_writer(message);
+    
     config_vals = config_loader(argv[1]);
     main_initializer();
 
-    return 0;
+    handle_signint(0);
+    return EXIT_SUCCESS;
 }
-
-
-
-// ---------------------------------------------------------------------------------------------
-// ---------------------------------------------------------------------------------------------
-// Inicializador principal das funções do sistema
-void main_initializer() {
-    create_threads();
-    create_workers(config_vals.nr_workers);
-}
-// ---------------------------------------------------------------------------------------------
-// ---------------------------------------------------------------------------------------------
-
-

@@ -1,56 +1,50 @@
-# Author: António Silva 2020238160
 # Author: Johnny Fernandes 2021190668
 # LEI UC 2022-23 - Sistemas Operativos
 
-# Compiler
+# Compiler:
 CC = gcc
 
-# Path to source and binary files
-BINDIR = bin
-SYS_DIR = src/home_iot
-SENSOR_DIR = src/sensor
-CONSOLE_DIR = src/user_console
+# Compiler flags:
+CFLAGS = -Wall -Werror -Wextra -pedantic -I. # Making sure either is flawless or breaks
+LDFLAGS = -pthread
 
-# Flags
-FLAGS_SYS = -Wall -I./$(SYS_DIR)/include
-FLAGS_SENSOR = -Wall -I./$(SENSOR_DIR)/include
-FLAGS_CONSOLE = -Wall -I./$(CONSOLE_DIR)/include
+# Source folders:
+SRCDIR = src
+LOGDIR = log
 
-# Program names
-PROG_SYS = home_iot
-PROG_SENSOR = sensor
-PROG_CONSOLE = user_console
+# HOME_IOT files:
+HOME_IOT_SRCS = $(wildcard $(SRCDIR)/home_iot/*.c)
+HOME_IOT_OBJS = $(HOME_IOT_SRCS:.c=.o)
+HOME_IOT_TARGET = bin/home_iot
 
-# Object files
-OBJS_SYS = $(SYS_DIR)/sys_manager.o 
-OBJS_SENSOR = $(SENSOR_DIR)/sensor.o
-OBJS_CONSOLE = $(CONSOLE_DIR)/user_console.o
+# SENSOR files:
+SENSOR_SRCS = $(wildcard $(SRCDIR)/sensor/*.c)
+SENSOR_OBJS = $(SENSOR_SRCS:.c=.o)
+SENSOR_TARGET = bin/sensor
 
-# Default target
-all: ${PROG_SYS} ${PROG_SENSOR} ${PROG_CONSOLE}
+# USER_CONSOLE files:
+USER_CONSOLE_SRCS = $(wildcard $(SRCDIR)/user_console/*.c)
+USER_CONSOLE_OBJS = $(USER_CONSOLE_SRCS:.c=.o)
+USER_CONSOLE_TARGET = bin/user_console
 
-# Clean all object files and executables
+# Default target:
+all: $(HOME_IOT_TARGET) $(SENSOR_TARGET) $(USER_CONSOLE_TARGET)
+
+# Linking the object files
+# May or may not use LDFLAGS, depending on SENSOR and CONSOLE implementation
+$(HOME_IOT_TARGET): $(HOME_IOT_OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(HOME_IOT_OBJS) -o $(HOME_IOT_TARGET)
+
+$(SENSOR_TARGET): $(SENSOR_OBJS)
+	$(CC) $(CFLAGS) $(SENSOR_OBJS) -o $(SENSOR_TARGET)
+
+$(USER_CONSOLE_TARGET): $(USER_CONSOLE_OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(USER_CONSOLE_OBJS) -o $(USER_CONSOLE_TARGET)
+
+# Compiling the source files
+%.o: %.c %.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Cleaning the project including log files
 clean:
-	rm -f $(OBJS_SYS) $(OBJS_SENSOR) $(OBJS_CONSOLE) *~ $(PROG_SYS) $(PROG_SENSOR) $(PROG_CONSOLE)
-
-# Render all executables
-$(PROG_SYS): $(OBJS_SYS)
-	$(CC) $(FLAGS_SYS) $(OBJS_SYS) -lm -o $(BINDIR)/$@
-
-$(PROG_SENSOR): $(OBJS_SENSOR)
-	$(CC) $(FLAGS_SENSOR) $(OBJS_SENSOR) -lm -o $(BINDIR)/$@
-
-$(PROG_CONSOLE): $(OBJS_CONSOLE)
-	$(CC) $(FLAGS_CONSOLE) $(OBJS_CONSOLE) -lm -o $(BINDIR)/$@
-
-# Render all object files
-# If there is a header file with the same name, compile it too
-$(SYS_DIR)/%.o: $(SYS_DIR)/%.c $(SYS_DIR)/include/%.h
-	$(CC) $(FLAGS_SYS) -c $< -o $@
-
-$(SENSOR_DIR)/%.o: $(SENSOR_DIR)/%.c $(SENSOR_DIR)/include/%.h
-	$(CC) $(FLAGS_SENSOR) -c $< -o $@
-
-$(CONSOLE_DIR)/%.o: $(CONSOLE_DIR)/%.c $(CONSOLE_DIR)/include/%.h
-	$(CC) $(FLAGS_CONSOLE) -c $< -o $@
-
+	rm -f $(HOME_IOT_OBJS) $(HOME_IOT_TARGET) $(SENSOR_OBJS) $(SENSOR_TARGET) $(USER_CONSOLE_OBJS) $(USER_CONSOLE_TARGET) $(LOGDIR)/*.log
