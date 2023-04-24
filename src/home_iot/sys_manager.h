@@ -14,7 +14,7 @@
 // Defines
 #define BUFFER_MESSAGE 256
 #define BUFFER_TIME 20
-#define LOG_PATH "log/home_iot.log"
+#define LOG_PATH "logs/home_iot.log"
 
 // TODO: Recheck usage of extern
 extern char message[BUFFER_MESSAGE];
