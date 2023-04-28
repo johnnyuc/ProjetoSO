@@ -6,24 +6,27 @@
 #include "sys_manager.h"
 #include "sys_shm.h"
 
+// System global variables [created in sys_manager.c]
+extern char log_buffer[BUFFER_MESSAGE];
+
 // Function to create and initialize shared memory
 SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo) {
     int shmid = shmget(IPC_PRIVATE, sizeof(SharedMemory), 0666 | IPC_CREAT);
     if (shmid == -1) {
-        sprintf(message, "SHM: ERROR CREATING SHARED MEMORY\n");
-        log_writer(message);
+        sprintf(log_buffer, "SHM: ERROR CREATING SHARED MEMORY\n");
+        log_writer(log_buffer);
         perror("shmget");
         exit(EXIT_FAILURE);
     }
 
-    sprintf(message, "SHARED MEMORY %d CREATED\n", shmid);
-    log_writer(message);
+    sprintf(log_buffer, "SHARED MEMORY %d CREATED\n", shmid);
+    log_writer(log_buffer);
 
     // Object to be shared
     SharedMemory *sharedMemory = (SharedMemory *)shmat(shmid, NULL, 0);
     if (sharedMemory == (void *)-1) {
-        sprintf(message, "SHM: ERROR ATTACHING SHARED MEMORY\n");
-        log_writer(message);
+        sprintf(log_buffer, "SHM: ERROR ATTACHING SHARED MEMORY\n");
+        log_writer(log_buffer);
         exit(EXIT_FAILURE);
     }
 
@@ -31,14 +34,14 @@ SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo) {
     // Calloc also initializes the memory to 0, it's safer
     sharedMemory->sensorKeyInfoArray = (SensorKeyInfo *)calloc(maxSensorKeyInfo, sizeof(SensorKeyInfo));
     if (sharedMemory->sensorKeyInfoArray == NULL) {
-        sprintf(message, "SHM: ERROR ALLOCATING SENSOR_KEY_INFO_ARRAY\n");
-        log_writer(message);
+        sprintf(log_buffer, "SHM: ERROR ALLOCATING SENSOR_KEY_INFO_ARRAY\n");
+        log_writer(log_buffer);
         exit(EXIT_FAILURE);
     }
     sharedMemory->alertKeyInfoArray = (AlertKeyInfo *)calloc(maxAlertKeyInfo, sizeof(AlertKeyInfo));
     if (sharedMemory->alertKeyInfoArray == NULL) {
-        sprintf(message, "SHM: ERROR ALLOCATING ALERT_KEY_INFO_ARRAY\n");
-        log_writer(message);
+        sprintf(log_buffer, "SHM: ERROR ALLOCATING ALERT_KEY_INFO_ARRAY\n");
+        log_writer(log_buffer);
         exit(EXIT_FAILURE);
     }
 
@@ -47,8 +50,8 @@ SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo) {
     sharedMemory->maxAlertKeyInfo = maxAlertKeyInfo;
     sharedMemory->shmid = shmid;
 
-    sprintf(message, "SHARED MEMORY %d FULLY INITIALIZED\n", shmid);
-    log_writer(message);
+    sprintf(log_buffer, "SHARED MEMORY %d FULLY INITIALIZED\n", shmid);
+    log_writer(log_buffer);
 
     return sharedMemory;
 }
@@ -57,8 +60,8 @@ SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo) {
 SharedMemory *attach_shm(int shmid) {
     SharedMemory *sharedMemory = (SharedMemory *)shmat(shmid, NULL, 0);
     if (sharedMemory == (void *)-1) {
-        sprintf(message, "SHM: ERROR ATTACHING SHARED MEMORY\n");
-        log_writer(message);
+        sprintf(log_buffer, "SHM: ERROR ATTACHING SHARED MEMORY\n");
+        log_writer(log_buffer);
         exit(EXIT_FAILURE);
     }
     return sharedMemory;
@@ -67,8 +70,8 @@ SharedMemory *attach_shm(int shmid) {
 // Function to detach shared memory
 void detach_shm(SharedMemory *sharedMemory) {
     if (shmdt(sharedMemory) == -1) {
-        sprintf(message, "SHM: ERROR DETACHING SHARED MEMORY %d\n", sharedMemory->shmid);
-        log_writer(message);
+        sprintf(log_buffer, "SHM: ERROR DETACHING SHARED MEMORY %d\n", sharedMemory->shmid);
+        log_writer(log_buffer);
         exit(EXIT_FAILURE);
     }
 }
@@ -86,8 +89,8 @@ void remove_shm(SharedMemory *sharedMemory) {
 
     // Remove shared memory
     if (shmctl(storedShmid, IPC_RMID, NULL) == -1) {
-        sprintf(message, "SHM: ERROR REMOVING SHARED MEMORY\n");
-        log_writer(message);
+        sprintf(log_buffer, "SHM: ERROR REMOVING SHARED MEMORY\n");
+        log_writer(log_buffer);
         exit(EXIT_FAILURE);
     }
 }

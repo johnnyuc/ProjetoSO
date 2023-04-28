@@ -10,14 +10,13 @@
 #include <string.h>
 #include <time.h>
 #include <pthread.h>
+#include <signal.h>
+#include <sys/stat.h>
 
 // Defines
 #define BUFFER_MESSAGE 256
 #define BUFFER_TIME 20
 #define LOG_PATH "logs/home_iot.log"
-
-// TODO: Recheck usage of extern
-extern char message[BUFFER_MESSAGE];
 
 // Structs
 typedef struct ConfigValues {
@@ -29,6 +28,7 @@ typedef struct ConfigValues {
 } ConfigValues;
 
 // Functions
+void handle_signint(int sig);
 ConfigValues config_loader(char* filepath);
 void log_writer(char* message);
 void main_initializer();

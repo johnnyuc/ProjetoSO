@@ -1,0 +1,34 @@
+// Para testar inserção de dados na shared memory
+// Colocar por baixo da criação da shared memory
+
+// Initialize test data for sensor key info array
+for (int i = 0; i < SHM->maxSensorKeyInfo; i++) {
+    char key[MAX_LEN];
+    sprintf(key, "sensor%d", i);
+    SHM->sensorKeyInfoArray[i].lastValue = i + 1;
+    SHM->sensorKeyInfoArray[i].minValue = i - 1;
+    SHM->sensorKeyInfoArray[i].maxValue = i + 2;
+    SHM->sensorKeyInfoArray[i].averageValue = i + 0.5;
+    SHM->sensorKeyInfoArray[i].updateCount = i;
+    strncpy(SHM->sensorKeyInfoArray[i].key, key, MAX_LEN - 1);
+    SHM->sensorKeyInfoArray[i].key[MAX_LEN - 1] = '\0';
+}
+// Initialize test data for alert key info array
+for (int i = 0; i < SHM->maxAlertKeyInfo; i++) {
+    char key[MAX_LEN];
+    sprintf(key, "alert%d", i);
+    SHM->alertKeyInfoArray[i].min = i + 0.5;
+    SHM->alertKeyInfoArray[i].max = i + 1.5;
+    strncpy(SHM->alertKeyInfoArray[i].key, key, MAX_LEN - 1);
+    SHM->alertKeyInfoArray[i].key[MAX_LEN - 1] = '\0';
+}
+// Print all values in array
+for (int i = 0; i < SHM->maxSensorKeyInfo; i++) {
+    printf("sensorKeyInfoArray[%d]:\n", i);
+    printf("\tkey: %s\n", SHM->sensorKeyInfoArray[i].key);
+    printf("\tlastValue: %d\n", SHM->sensorKeyInfoArray[i].lastValue);
+    printf("\tminValue: %d\n", SHM->sensorKeyInfoArray[i].minValue);
+    printf("\tmaxValue: %d\n", SHM->sensorKeyInfoArray[i].maxValue);
+    printf("\taverageValue: %f\n", SHM->sensorKeyInfoArray[i].averageValue);
+    printf("\tupdateCount: %d\n", SHM->sensorKeyInfoArray[i].updateCount);
+}

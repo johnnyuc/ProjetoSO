@@ -5,42 +5,92 @@
 
 // Includes
 #include "sys_manager.h"
+#include "sys_intqueue.h"
 #include "sys_threads.h"
 #include "sys_workers.h"
 #include "sys_alerts.h"
 #include "sys_shm.h"
 
 // Global variables
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+// Loading
 ConfigValues config_vals;
-SharedMemory *SHM;
+
+// Log writer
+char log_buffer[BUFFER_MESSAGE];
+pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// Shared memory
+SharedMemory *shm;
+
+// Threads
+pthread_t console_reader;
+pthread_t sensor_reader;
+pthread_t dispatcher;
+
+// Queue
+Queue *intqueue;
+
+// Pipes
+int **pipes_fd;
+int sensor_fd, console_fd;
 
 // Function to handle the SIGINT signal
 void handle_signint(int sig) {
     // Tricky part:
     // Careful about cleaning up resources like waiting for all threads to finish
     // processes to finish, detaching access to shm, free calloc and then exit and write to log
-    remove_shm(SHM);
-    sprintf(message, "EXITING, CODE %d\n", sig);
-    log_writer(message);
-    pthread_mutex_destroy(&mutex);
+    printf("Preparing to exit...\n");
+
+    // Freeing and detaching shm
+    remove_shm(shm);
+
+    // Closing and freeing pipes
+    for (int i = 0; i < config_vals.nr_workers; i++) {
+        close(pipes_fd[i][0]);
+        close(pipes_fd[i][1]);
+        free(pipes_fd[i]);
+    }
+    free(pipes_fd);
+
+    // Closing named pipes
+    close(sensor_fd);
+    close(console_fd);
+    // To remove the named pipe from filesystem
+    unlink("SENSOR_PIPE");
+    unlink("CONSOLE_PIPE");
+
+    // Waiting for threads to finish
+    pthread_join(console_reader, NULL);
+    pthread_join(sensor_reader, NULL);
+    pthread_join(dispatcher, NULL);
+
+    // Waiting for workers to finish
+    for (int i = 0; i < config_vals.nr_workers; i++) {
+        wait(NULL);
+    }
+
+    sprintf(log_buffer, "EXITING, CODE %d\n", sig);
+    log_writer(log_buffer);
+
+    pthread_mutex_destroy(&log_mutex);
     exit(EXIT_SUCCESS);
 }
 
 // Loading config file values
 ConfigValues config_loader(char* filepath) {
+    char config[BUFFER_MESSAGE];
     ConfigValues values = {0};
     FILE* config_file = fopen(filepath, "r");
 
     if (config_file == NULL) {
-        sprintf(message, "FAILED TO OPEN CONFIG FILE. EXITING\n");
-        log_writer(message);
+        sprintf(config, "FAILED TO OPEN CONFIG FILE. EXITING\n");
+        log_writer(config);
         exit(EXIT_FAILURE);
     }
     
     int param_count = 0;
-    while (fgets(message, sizeof(message), config_file)) {
-        char* token = strtok(message, " \t\r\n");  // for each line, get the first token
+    while (fgets(config, sizeof(config), config_file)) {
+        char* token = strtok(config, " \t\r\n");  // for each line, get the first token
         if (token == NULL ||  token[0] == '#') {
             continue;  // skip empty lines and comments
         }
@@ -65,8 +115,8 @@ ConfigValues config_loader(char* filepath) {
 
     // Checks if the config file has the correct number of values
     if (param_count != 5) {
-        sprintf(message, "INCORRECT CONFIG FILE PARAMS. EXITING\n");
-        log_writer(message);
+        sprintf(config, "INCORRECT CONFIG FILE PARAMS. EXITING\n");
+        log_writer(config);
         exit(EXIT_FAILURE);
     }
 
@@ -75,11 +125,11 @@ ConfigValues config_loader(char* filepath) {
 }
 
 // Function to write to log file and to the screen
-void log_writer(char* message) {
+void log_writer(char* log_buffer) {
     // If the mutex is locked, the thread will wait until it is unlocked
     // Makes sure that only one thread can write to the log file at a time
     // Also guarantees that the log file will be written to in the correct order
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&log_mutex);
 
     // Timestamp format: dd/mm/yy hh:mm:ss
     // https://en.cppreference.com/w/c/chrono/strftime
@@ -91,7 +141,7 @@ void log_writer(char* message) {
     strftime(timestamp, sizeof(timestamp), "%d/%m/%y %H:%M:%S", tm_info);
 
     // Writes the message to the screen
-    printf("[%s] %s", timestamp, message);
+    printf("[%s] %s", timestamp, log_buffer);
 
     // Writes the message to the log file
     FILE* log_file = fopen(LOG_PATH, "a");
@@ -99,38 +149,51 @@ void log_writer(char* message) {
         printf("LOG ERROR: CANNOT WRITE TO LOG\n");
         exit(EXIT_FAILURE);
     }
-    fprintf(log_file, "[%s] %s", timestamp, message);
+    fprintf(log_file, "[%s] %s", timestamp, log_buffer);
     fclose(log_file);
 
     // Unlocks the mutex
-    pthread_mutex_unlock(&mutex);
-    memset(message, 0, BUFFER_MESSAGE); // clears the message buffer
+    pthread_mutex_unlock(&log_mutex);
+    memset(log_buffer, 0, BUFFER_MESSAGE); // clears the message buffer
 }
 
 // Main function to initialize the system manager
 void main_initializer() {
+    shm = create_shm(config_vals.max_shmkeys, config_vals.max_alerts);
+    intqueue = create_queue(config_vals.queue_size);
+
+    // Creating unnamed pipes for workers
+    pipes_fd = malloc(config_vals.nr_workers * sizeof(int *));
+    create_unnamed_pipes(pipes_fd, config_vals.nr_workers);
+
+    // Creating named pipes for sensor and console
+    create_named_pipes();
+
+    // Opening named pipes
+    sensor_fd = open("SENSOR_PIPE", O_RDONLY | O_NONBLOCK);
+    console_fd = open("CONSOLE_PIPE", O_RDONLY | O_NONBLOCK);
+
+    create_workers(config_vals.nr_workers, shm->shmid);
+    create_watcher(shm->shmid);
     create_threads();
-    SHM = create_shm(config_vals.max_shmkeys, config_vals.max_alerts);
-    create_workers(config_vals.nr_workers, SHM->shmid);
-    create_watcher(SHM->shmid);
 }
 
 // Main function
 int main(int argc, char *argv[]) {
-    char message[BUFFER_MESSAGE];
+    signal(SIGINT, handle_signint);
     // Verifies if the config file path was passed as a parameter
     if (argc != 2) {
-        sprintf(message, "INVALID CONFIG ARGUMENT ON START. EXITING\n");
-        log_writer(message);
+        sprintf(log_buffer, "INVALID CONFIG ARGUMENT ON START. EXITING\n");
+        log_writer(log_buffer);
         exit(EXIT_FAILURE);
     }
 
-    sprintf(message, "HOME_IOT SIMULATOR STARTING\n");
-    log_writer(message);
+    sprintf(log_buffer, "HOME_IOT SIMULATOR STARTING\n");
+    log_writer(log_buffer);
     
     config_vals = config_loader(argv[1]);
     main_initializer();
 
-    handle_signint(0);
+    handle_signint(0);  // Exits
     return EXIT_SUCCESS;
 }

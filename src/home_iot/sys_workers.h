@@ -10,7 +10,8 @@
 #include <sys/wait.h> // Used for wait
 
 // Functions
+void create_unnamed_pipes(int **pipes_fd, int nr_workers);
 int create_workers(int nr_workers, int shmid);
-int worker_tasks(int shmid);
+int worker_tasks(int shmid, int *pipe_fd);
 
 #endif //IOT_PROJECT_WORKERS_H
