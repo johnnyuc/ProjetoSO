@@ -24,7 +24,7 @@
 // Structs
 typedef struct {
     char* sensor_id;
-    int interval_secs;
+    float interval_secs;
     char* key;
     int min_value;
     int max_value;

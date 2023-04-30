@@ -188,7 +188,8 @@ void main_initializer() {
     console_fd = open("CONSOLE_PIPE", O_RDONLY | O_NONBLOCK);
 
     // Creating workers and it's own shared memory
-    worker_shm = create_worker_queue(config_vals.max_sensors);
+    worker_shm = create_worker_queue(config_vals.nr_workers);
+    worker_shm = attach_worker_queue(worker_shm->shmid);
     create_workers(config_vals.nr_workers, shm->shmid, worker_shm->shmid);
     
     // Creating watcher

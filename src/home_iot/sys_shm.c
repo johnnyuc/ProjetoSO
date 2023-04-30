@@ -112,8 +112,35 @@ void remove_shm(SharedMemory *sharedMemory) {
     }
 }
 
-// Missing functions to read, write, remove, update and search for sensor and alert key info
+void print_shared_memory(SharedMemory *shm) {
+    pthread_mutex_lock(&shm->mutex);
+    
+    printf("SENSOR KEY INFO:\n");
+    for (int i = 0; i < shm->maxSensorKeyInfo; i++) {
+        if (strcmp(shm->sensorKeyInfoArray[i].key, "") == 0) continue;
+        printf("  Key: %s, Last Value: %d, Min Value: %d, Max Value: %d, Average Value: %.2f, Update Count: %d\n",
+            shm->sensorKeyInfoArray[i].key,
+            shm->sensorKeyInfoArray[i].lastValue,
+            shm->sensorKeyInfoArray[i].minValue,
+            shm->sensorKeyInfoArray[i].maxValue,
+            shm->sensorKeyInfoArray[i].averageValue,
+            shm->sensorKeyInfoArray[i].updateCount);
+    }
+    
+    printf("ALERT KEY INFO:\n");
+    for (int i = 0; i < shm->maxAlertKeyInfo; i++) {
+        //if (strcmp(shm->alertKeyInfoArray[i].key, "") == 0) continue;
+        printf("  Key: %s, Min Value: %.2f, Max Value: %.2f\n",
+            shm->alertKeyInfoArray[i].key,
+            shm->alertKeyInfoArray[i].min,
+            shm->alertKeyInfoArray[i].max);
+    }
+    
+    pthread_mutex_unlock(&shm->mutex);
+}
 
+
+// Missing functions to read, write, remove, update and search for sensor and alert key info
 void insert_sensor_key(SharedMemory* sharedMemory, char* key, int lastValue, int minValue, int maxValue, double averageValue, int updateCount) {
     pthread_mutex_lock(&sharedMemory->mutex);
 
@@ -144,33 +171,6 @@ void insert_sensor_key(SharedMemory* sharedMemory, char* key, int lastValue, int
     pthread_mutex_unlock(&sharedMemory->mutex);
 }
 
-void insert_alert_key(SharedMemory* sharedMemory, char* key, float min, float max) {
-    pthread_mutex_lock(&sharedMemory->mutex);
-
-    int i = 0;
-    while (i < sharedMemory->maxAlertKeyInfo && sharedMemory->alertKeyInfoArray[i].key[0] != '\0') {
-        if (strcmp(sharedMemory->alertKeyInfoArray[i].key, key) == 0) {
-            // An alert key with the same name already exists
-            pthread_mutex_unlock(&sharedMemory->mutex);
-            return;
-        }
-        i++;
-    }
-
-    if (i == sharedMemory->maxAlertKeyInfo) {
-        // Array is full
-        pthread_mutex_unlock(&sharedMemory->mutex);
-        return;
-    }
-
-    // Insert new alert key
-    strcpy(sharedMemory->alertKeyInfoArray[i].key, key);
-    sharedMemory->alertKeyInfoArray[i].min = min;
-    sharedMemory->alertKeyInfoArray[i].max = max;
-
-    pthread_mutex_unlock(&sharedMemory->mutex);
-}
-
 // Remove a SensorKeyInfo com a chave especificada da estrutura SharedMemory
 void remove_sensor_key(SharedMemory *sharedMemory, char *key) {
     // Encontra o índice da chave no array
@@ -196,6 +196,34 @@ void remove_sensor_key(SharedMemory *sharedMemory, char *key) {
     pthread_mutex_unlock(&sharedMemory->mutex);
 
     printf("Chave de sensor removida: %s\n", key);
+}
+
+void insert_alert_key(SharedMemory* sharedMemory, char* key, float min, float max) {
+    pthread_mutex_lock(&sharedMemory->mutex);
+
+    int i = 0;
+    while (i < sharedMemory->maxAlertKeyInfo && strcmp(sharedMemory->alertKeyInfoArray[i].key, "") != 0) {
+        if (strcmp(sharedMemory->alertKeyInfoArray[i].key, key) == 0) {
+            // An alert key with the same name already exists
+            pthread_mutex_unlock(&sharedMemory->mutex);
+            return;
+        }
+        i++;
+    }
+
+    if (i == sharedMemory->maxAlertKeyInfo) {
+        // Array is full
+        pthread_mutex_unlock(&sharedMemory->mutex);
+        return;
+    }
+
+    printf("Inserting in location %d\n", i);
+    // Insert new alert key
+    strcpy(sharedMemory->alertKeyInfoArray[i].key, key);
+    sharedMemory->alertKeyInfoArray[i].min = min;
+    sharedMemory->alertKeyInfoArray[i].max = max;
+
+    pthread_mutex_unlock(&sharedMemory->mutex);
 }
 
 // Remove uma AlertKeyInfo com a chave especificada da estrutura SharedMemory
@@ -301,7 +329,7 @@ WorkerSHM *create_worker_queue(int nr_workers) {
 }
 
 // Function to attach shared memory
-WorkerSHM *attach_worker_shm(int shmid) {
+WorkerSHM *attach_worker_queue(int shmid) {
     WorkerSHM *worker_shm = (WorkerSHM *)shmat(shmid, NULL, 0);
     if (worker_shm == (void *)-1) {
         sprintf(log_buffer, "SHM: ERROR ATTACHING SHARED MEMORY\n");
@@ -314,7 +342,7 @@ WorkerSHM *attach_worker_shm(int shmid) {
     return worker_shm;
 }
 
-void detach_worker_shm(WorkerSHM *worker_shm) {
+void detach_worker_queue(WorkerSHM *worker_shm) {
     if (shmdt(worker_shm) == -1) {
         sprintf(log_buffer, "SHM: ERROR DETACHING SHARED MEMORY %d\n", worker_shm->shmid);
         log_writer(log_buffer);
@@ -329,7 +357,7 @@ void remove_worker_queue(WorkerSHM *worker_shm) {
     free(worker_shm->workerAvailability);
 
     // Detach shared memory
-    detach_worker_shm(worker_shm);
+    detach_worker_queue(worker_shm);
 
     // Remove shared memory
     int stillExists = shmget(storedShmid, 0, 0);
@@ -348,6 +376,23 @@ void remove_worker_queue(WorkerSHM *worker_shm) {
             exit(EXIT_FAILURE);
         }
     }
+}
+
+void print_worker_queue(WorkerSHM *worker_shm) {
+    // Acquire the mutex before accessing the shared memory
+    pthread_mutex_lock(&worker_shm->mutex);
+
+    printf("Worker Queue:\n");
+    for(int i = 0; i < worker_shm->size; i++) {
+        // Calculate the index of the current element in the queue
+        int index = (worker_shm->front + i) % worker_shm->nr_workers;
+        
+        // Print the worker ID
+        printf("%d ", worker_shm->workerAvailability[index].available);
+    }
+    printf("\n");
+    
+    pthread_mutex_unlock(&worker_shm->mutex);
 }
 
 void enqueue_worker(WorkerSHM *worker_shm, int worker_id) {

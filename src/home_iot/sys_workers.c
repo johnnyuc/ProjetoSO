@@ -29,13 +29,19 @@ int create_workers(int nr_workers, int shmid, int worker_shmid) {
             sprintf(log_buffer, "WORKER PROCESS %d CREATED\n", getpid());
             log_writer(log_buffer);
 
+            // Starting worker process
             close(pipes_fd[i][1]); // Close write end of pipe
-            SharedMemory *shm = attach_shm(shmid);
-            WorkerSHM *worker_shm = attach_worker_shm(worker_shmid);
+            SharedMemory *shm = attach_shm(shmid); // Attach shared memory
+            WorkerSHM *worker_shm = attach_worker_queue(worker_shmid);  // Attach worker queue
 
+            // Worker process
             worker_tasks(i, worker_shm, shm, pipes_fd[i]); // Main worker function
-            detach_shm(shm);
 
+            // Closing worker process
+            detach_shm(shm); // Detach shared memory
+            detach_worker_queue(worker_shm); // Detach worker queue
+
+            // Log writer
             sprintf(log_buffer, "WORKER PROCESS %d ENDED\n", getpid());
             log_writer(log_buffer);
             exit(EXIT_SUCCESS);
@@ -44,31 +50,47 @@ int create_workers(int nr_workers, int shmid, int worker_shmid) {
     return 0;
 }
 
+// Message splitter
+int split_message(char *message, char **tokens) {
+    int num_tokens = 0;
+    char *token = strtok(message, "#");
+    while (token != NULL && num_tokens < MAX_TOKENS) {
+        tokens[num_tokens] = token;
+        num_tokens++;
+        token = strtok(NULL, "#");
+    }
+    return num_tokens;
+}
+
 // Main worker function
 int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe_fd) {
     char llog_buffer[BUFFER_MESSAGE];
-    char *command;
-
-    printf("WORKER %d STARTED ATTACHED TO %d\n", selfid, worker_shm->shmid);
+    char *tokens[MAX_TOKENS];
+    int num_tokens;
 
     while (1) {
         read(pipe_fd[0], llog_buffer, BUFFER_MESSAGE);
-        command = strtok(llog_buffer, "#");
-        pthread_mutex_lock(&shm->mutex);
-        if (strcmp(command, "stats") == 0) {
-            printf("WORKER %d RECEIVED: %s\n", getpid(), llog_buffer);
-        } else if (strcmp(command, "reset") == 0) {
-            printf("WORKER %d RECEIVED: %s\n", getpid(), llog_buffer);
-        } else if (strcmp(command, "sensors") == 0) {
-            printf("WORKER %d RECEIVED: %s\n", getpid(), llog_buffer);
-        } else if (strcmp(command, "add_alert") == 0) {
-            printf("WORKER %d RECEIVED: %s\n", getpid(), llog_buffer);
-        } else if (strcmp(command, "remove_alert") == 0 ) {
-           printf("WORKER %d RECEIVED: %s\n", getpid(), llog_buffer);
-        } else if (strcmp(command, "list_alerts") == 0) {
-            printf("WORKER %d RECEIVED: %s\n", getpid(), llog_buffer);
+        num_tokens = split_message(llog_buffer, tokens);
+        printf("WORKER %d RECEIVED %d TOKENS\n", getpid(), num_tokens);
+        if (num_tokens > 0) {
+            if (strcmp(tokens[1], "STATS") == 0) {
+                
+            } else if (strcmp(tokens[1], "RESET") == 0) {
+                
+            } else if (strcmp(tokens[1], "SENSORS") == 0) {
+                
+            } else if (strcmp(tokens[1], "ADD_ALERT") == 0) {
+                insert_alert_key(shm, tokens[2], atof(tokens[4]), atof(tokens[5]));
+                printf("ENTERED\n");
+                print_shared_memory(shm);
+            } else if (strcmp(tokens[1], "REMOVE_ALERT") == 0 ) {
+                
+            } else if (strcmp(tokens[1], "LIST_ALERTS") == 0) {
+                
+            }
         }
-        pthread_mutex_unlock(&shm->mutex);
+        //print_worker_queue(worker_shm);
+        enqueue_worker(worker_shm, selfid);
     }
     return 0;
 }

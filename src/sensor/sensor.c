@@ -62,7 +62,9 @@ void sensor_run(SensorArgs args) {
             }
         }
         msgs_sent++;
-        sleep(args.interval_secs);
+        printf("args.interval_secs: %f\n", args.interval_secs);
+        // Cannot sleep 0 seconds - pipe saturation
+        usleep(args.interval_secs * 1000000);
     }
     exit(EXIT_FAILURE);
 }
@@ -85,6 +87,9 @@ SensorArgs main_initializer(char* argv[]) {
     if (args.interval_secs < 0) {
         printf("INTERVAL_SECS (>=0)\n");
         exit(EXIT_FAILURE);
+    }
+    if (args.interval_secs == 0) {
+        args.interval_secs = 0.25;
     }
     if (strlen(args.key) < MIN_LEN || strlen(args.key) > MAX_LEN) {
         printf("ALPHANUMERIC KEY LENGTH SHOULD BE BETWEEN 3 AND 32\n");

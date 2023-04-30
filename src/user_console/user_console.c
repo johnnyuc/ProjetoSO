@@ -172,6 +172,8 @@ void *writer_function() {
                 break;
             }
         }
+        // Prevent pipe saturation - same rule as sensor
+        usleep(0.25 * 1000000);
     }
     return NULL;
 }

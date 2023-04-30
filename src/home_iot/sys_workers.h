@@ -10,6 +10,9 @@
 #include <sys/wait.h> // Used for wait
 #include "sys_shm.h" // Used for SharedMemory
 
+// Defines
+#define MAX_TOKENS 6
+
 // Functions
 void create_unnamed_pipes(int **pipes_fd, int nr_workers);
 int create_workers(int nr_workers, int shmid, int worker_shmid);
