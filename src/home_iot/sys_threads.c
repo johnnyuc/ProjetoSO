@@ -80,14 +80,16 @@ void *console_reader_function() {
         log_writer(llog_buffer);
         exit(EXIT_FAILURE);
     }
-    // read from console pipe
-    char buffer[BUFFER_MESSAGE];
-    while (read(console_fd, buffer, BUFFER_MESSAGE) > 0) {
-        // Write to queue
-        enqueue(intqueue, buffer);
-        printf("SENSOR READER: %s\n", buffer);
+    
+    while (1) {
+        // read from sensor pipe
+        char buffer[BUFFER_MESSAGE];
+        if (read(console_fd, buffer, BUFFER_MESSAGE) > 0) {
+            // Write to queue
+            enqueue(intqueue, buffer);
+            printf("SENSOR READER: %s\n", buffer);
+        }
     }
-
     return NULL;
 }
 
