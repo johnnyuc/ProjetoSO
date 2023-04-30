@@ -172,6 +172,7 @@ void *writer_function() {
                 break;
             }
         }
+        memset(command, 0, sizeof(command));
         // Prevent pipe saturation - same rule as sensor
         usleep(0.25 * 1000000);
     }

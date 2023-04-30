@@ -76,6 +76,7 @@ int create_threads() {
 // Main thread functions
 void *console_reader_function() {
     char llog_buffer[BUFFER_MESSAGE];
+    char buffer[BUFFER_MESSAGE];
     
     // Open console pipe
     int console_fd = open("CONSOLE_PIPE", O_RDONLY | O_NONBLOCK);
@@ -99,13 +100,13 @@ void *console_reader_function() {
             exit(EXIT_FAILURE);
         } else if (result > 0 && FD_ISSET(console_fd, &rfds)) {
             // Data is available on the console pipe, read it
-            char buffer[BUFFER_MESSAGE];
             if (read(console_fd, buffer, BUFFER_MESSAGE) > 0) {
                 // Write to queue
                 enqueue(intqueue, buffer);
                 printf("CONSOLE READER: %s\n", buffer);
             }
         }
+        memset(buffer, 0, BUFFER_MESSAGE);
     }
 
     return NULL;
@@ -114,7 +115,8 @@ void *console_reader_function() {
 
 void *sensor_reader_function() {
     char llog_buffer[BUFFER_MESSAGE];
-    
+    char buffer[BUFFER_MESSAGE];
+
     // Open sensor pipe
     int sensor_fd = open("SENSOR_PIPE", O_RDONLY | O_NONBLOCK);
     if (sensor_fd == -1) {
@@ -137,13 +139,13 @@ void *sensor_reader_function() {
             exit(EXIT_FAILURE);
         } else if (result > 0 && FD_ISSET(sensor_fd, &rfds)) {
             // Data is available on the sensor pipe, read it
-            char buffer[BUFFER_MESSAGE];
             if (read(sensor_fd, buffer, BUFFER_MESSAGE) > 0) {
                 // Write to queue
                 enqueue(intqueue, buffer);
                 printf("SENSOR READER: %s\n", buffer);
             }
         }
+        memset(buffer, 0, BUFFER_MESSAGE);
     }
 
     return NULL;

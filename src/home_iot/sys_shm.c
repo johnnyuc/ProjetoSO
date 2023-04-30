@@ -93,52 +93,44 @@ void remove_shm(SharedMemory *sharedMemory) {
     // Detach shared memory
     detach_shm(sharedMemory);
 
-    // Remove shared memory
-    int stillExists = shmget(storedShmid, 0, 0);
-    if (stillExists == -1) {
-        if (errno == ENOENT) {
-            printf("Shared memory segment %d has been successfully removed.\n", storedShmid);
-        } else {
-            perror("shmget");
-            exit(EXIT_FAILURE);
-        }
+    // Remove shared memory{
+    if (shmctl(storedShmid, IPC_RMID, NULL) == -1) {
+        perror("shmctl");
+        sprintf(log_buffer, "SHM: ERROR REMOVING SHARED MEMORY\n");
+        log_writer(log_buffer);
+        exit(EXIT_FAILURE);
     } else {
-        if (shmctl(storedShmid, IPC_RMID, NULL) == -1) {
-            perror("shmctl");
-            sprintf(log_buffer, "SHM: ERROR REMOVING SHARED MEMORY\n");
-            log_writer(log_buffer);
-            exit(EXIT_FAILURE);
-        }
+        sprintf(log_buffer, "SHARED MEMORY %d REMOVED\n", storedShmid);
+        log_writer(log_buffer);
     }
 }
 
-void print_shared_memory(SharedMemory *shm) {
-    pthread_mutex_lock(&shm->mutex);
+void print_shared_memory(SharedMemory *sharedMemory) {
+    pthread_mutex_lock(&sharedMemory->mutex);
     
     printf("SENSOR KEY INFO:\n");
-    for (int i = 0; i < shm->maxSensorKeyInfo; i++) {
-        if (strcmp(shm->sensorKeyInfoArray[i].key, "") == 0) continue;
+    for (int i = 0; i < sharedMemory->maxSensorKeyInfo; i++) {
+        if (strcmp(sharedMemory->sensorKeyInfoArray[i].key, "") == 0) continue;
         printf("  Key: %s, Last Value: %d, Min Value: %d, Max Value: %d, Average Value: %.2f, Update Count: %d\n",
-            shm->sensorKeyInfoArray[i].key,
-            shm->sensorKeyInfoArray[i].lastValue,
-            shm->sensorKeyInfoArray[i].minValue,
-            shm->sensorKeyInfoArray[i].maxValue,
-            shm->sensorKeyInfoArray[i].averageValue,
-            shm->sensorKeyInfoArray[i].updateCount);
+            sharedMemory->sensorKeyInfoArray[i].key,
+            sharedMemory->sensorKeyInfoArray[i].lastValue,
+            sharedMemory->sensorKeyInfoArray[i].minValue,
+            sharedMemory->sensorKeyInfoArray[i].maxValue,
+            sharedMemory->sensorKeyInfoArray[i].averageValue,
+            sharedMemory->sensorKeyInfoArray[i].updateCount);
     }
     
     printf("ALERT KEY INFO:\n");
-    for (int i = 0; i < shm->maxAlertKeyInfo; i++) {
-        //if (strcmp(shm->alertKeyInfoArray[i].key, "") == 0) continue;
+    for (int i = 0; i < sharedMemory->maxAlertKeyInfo; i++) {
+        if (strcmp(sharedMemory->alertKeyInfoArray[i].key, "") == 0) continue;
         printf("  Key: %s, Min Value: %.2f, Max Value: %.2f\n",
-            shm->alertKeyInfoArray[i].key,
-            shm->alertKeyInfoArray[i].min,
-            shm->alertKeyInfoArray[i].max);
+            sharedMemory->alertKeyInfoArray[i].key,
+            sharedMemory->alertKeyInfoArray[i].min,
+            sharedMemory->alertKeyInfoArray[i].max);
     }
     
-    pthread_mutex_unlock(&shm->mutex);
+    pthread_mutex_unlock(&sharedMemory->mutex);
 }
-
 
 // Missing functions to read, write, remove, update and search for sensor and alert key info
 void insert_sensor_key(SharedMemory* sharedMemory, char* key, int lastValue, int minValue, int maxValue, double averageValue, int updateCount) {
@@ -198,11 +190,12 @@ void remove_sensor_key(SharedMemory *sharedMemory, char *key) {
     printf("Chave de sensor removida: %s\n", key);
 }
 
-void insert_alert_key(SharedMemory* sharedMemory, char* key, float min, float max) {
+void insert_alert_key(SharedMemory *sharedMemory, char *key, float min, float max) {
     pthread_mutex_lock(&sharedMemory->mutex);
 
     int i = 0;
     while (i < sharedMemory->maxAlertKeyInfo && strcmp(sharedMemory->alertKeyInfoArray[i].key, "") != 0) {
+        printf("Alert key: %s\n", sharedMemory->alertKeyInfoArray[i].key);
         if (strcmp(sharedMemory->alertKeyInfoArray[i].key, key) == 0) {
             // An alert key with the same name already exists
             pthread_mutex_unlock(&sharedMemory->mutex);
@@ -211,13 +204,6 @@ void insert_alert_key(SharedMemory* sharedMemory, char* key, float min, float ma
         i++;
     }
 
-    if (i == sharedMemory->maxAlertKeyInfo) {
-        // Array is full
-        pthread_mutex_unlock(&sharedMemory->mutex);
-        return;
-    }
-
-    printf("Inserting in location %d\n", i);
     // Insert new alert key
     strcpy(sharedMemory->alertKeyInfoArray[i].key, key);
     sharedMemory->alertKeyInfoArray[i].min = min;
@@ -231,6 +217,7 @@ void remove_alert_key(SharedMemory *sharedMemory, char *key) {
     // Encontra o índice da chave no array
     int index = -1;
     for (int i = 0; i < sharedMemory->maxAlertKeyInfo; i++) {
+        printf("Alert key: %s\n", sharedMemory->alertKeyInfoArray[i].key);
         if (strcmp(sharedMemory->alertKeyInfoArray[i].key, key) == 0) {
             index = i;
             break;
@@ -360,21 +347,14 @@ void remove_worker_queue(WorkerSHM *worker_shm) {
     detach_worker_queue(worker_shm);
 
     // Remove shared memory
-    int stillExists = shmget(storedShmid, 0, 0);
-    if (stillExists == -1) {
-        if (errno == ENOENT) {
-            printf("Shared memory segment %d has been successfully removed.\n", storedShmid);
-        } else {
-            perror("shmget");
-            exit(EXIT_FAILURE);
-        }
+    if (shmctl(storedShmid, IPC_RMID, NULL) == -1) {
+        perror("shmctl");
+        sprintf(log_buffer, "SHM: ERROR REMOVING SHARED MEMORY\n");
+        log_writer(log_buffer);
+        exit(EXIT_FAILURE);
     } else {
-        if (shmctl(storedShmid, IPC_RMID, NULL) == -1) {
-            perror("shmctl");
-            sprintf(log_buffer, "SHM: ERROR REMOVING SHARED MEMORY\n");
-            log_writer(log_buffer);
-            exit(EXIT_FAILURE);
-        }
+        sprintf(log_buffer, "SHARED MEMORY %d REMOVED\n", storedShmid);
+        log_writer(log_buffer);
     }
 }
 

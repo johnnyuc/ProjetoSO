@@ -79,6 +79,7 @@ void remove_worker_queue(WorkerSHM *worker_shm);
 
 // Writes, reads, removes
 void print_shared_memory(SharedMemory *sharedMemory);
+
 void print_worker_queue(WorkerSHM *worker_shm);
 void enqueue_worker(WorkerSHM *worker_shm, int worker_id);
 int dequeue_worker(WorkerSHM *worker_shm);

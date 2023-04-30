@@ -69,9 +69,14 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
     int num_tokens;
 
     while (1) {
+        printf("Attached to SHM and Array has address: %p\n", (void *) shm);
+        printf("Where first available alert address is: %p\n", (void *) &shm->alertKeyInfoArray[0]);
+        printf("With data-> Key: %s, Min: %f, Max: %f\n", shm->alertKeyInfoArray[0].key, shm->alertKeyInfoArray[0].min, shm->alertKeyInfoArray[0].max);
+        printf("Where key address is: %p\n", (void *) &shm->alertKeyInfoArray[0].key);
+
         read(pipe_fd[0], llog_buffer, BUFFER_MESSAGE);
         num_tokens = split_message(llog_buffer, tokens);
-        printf("WORKER %d RECEIVED %d TOKENS\n", getpid(), num_tokens);
+
         if (num_tokens > 0) {
             if (strcmp(tokens[1], "STATS") == 0) {
                 
@@ -81,10 +86,10 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
                 
             } else if (strcmp(tokens[1], "ADD_ALERT") == 0) {
                 insert_alert_key(shm, tokens[2], atof(tokens[4]), atof(tokens[5]));
-                printf("ENTERED\n");
                 print_shared_memory(shm);
             } else if (strcmp(tokens[1], "REMOVE_ALERT") == 0 ) {
-                
+                remove_alert_key(shm, tokens[2]);
+                print_shared_memory(shm);
             } else if (strcmp(tokens[1], "LIST_ALERTS") == 0) {
                 
             }
