@@ -8,10 +8,11 @@
 #include <stdlib.h> // Used for NULL
 #include <unistd.h> // Used for fork
 #include <sys/wait.h> // Used for wait
+#include "sys_shm.h" // Used for SharedMemory
 
 // Functions
 void create_unnamed_pipes(int **pipes_fd, int nr_workers);
-int create_workers(int nr_workers, int shmid);
-int worker_tasks(int shmid, int *pipe_fd);
+int create_workers(int nr_workers, int shmid, int worker_shmid);
+int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe_fd);
 
 #endif //IOT_PROJECT_WORKERS_H

@@ -21,6 +21,7 @@ pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Shared memory
 SharedMemory *shm;
+WorkerSHM *worker_shm;
 
 // Threads
 pthread_t console_reader;
@@ -39,12 +40,20 @@ void handle_signint(int sig) {
     // Tricky part:
     // Careful about cleaning up resources like waiting for all threads to finish
     // processes to finish, detaching access to shm, free calloc and then exit and write to log
+    
+    // Waiting for workers to finish
+    for (int i = 0; i < config_vals.nr_workers; i++) {
+        wait(NULL);
+    }
+
+    // Gracefully exiting threads
+    pthread_cancel(console_reader);
+    pthread_cancel(sensor_reader);
+    pthread_cancel(dispatcher);
+
     printf("Preparing to exit...\n");
 
-    // Freeing and detaching shm
-    remove_shm(shm);
-
-    // Closing and freeing pipes
+    // Closing and freeing unnamed pipes
     for (int i = 0; i < config_vals.nr_workers; i++) {
         close(pipes_fd[i][0]);
         close(pipes_fd[i][1]);
@@ -55,19 +64,14 @@ void handle_signint(int sig) {
     // Closing named pipes
     close(sensor_fd);
     close(console_fd);
+
     // To remove the named pipe from filesystem
     unlink("SENSOR_PIPE");
     unlink("CONSOLE_PIPE");
 
-    // Waiting for threads to finish
-    pthread_join(console_reader, NULL);
-    pthread_join(sensor_reader, NULL);
-    pthread_join(dispatcher, NULL);
-
-    // Waiting for workers to finish
-    for (int i = 0; i < config_vals.nr_workers; i++) {
-        wait(NULL);
-    }
+    // Freeing and detaching shm
+    remove_shm(shm);
+    remove_worker_queue(worker_shm);
 
     sprintf(log_buffer, "EXITING, CODE %d\n", sig);
     log_writer(log_buffer);
@@ -160,6 +164,16 @@ void log_writer(char* log_buffer) {
 // Main function to initialize the system manager
 void main_initializer() {
     shm = create_shm(config_vals.max_shmkeys, config_vals.max_alerts);
+
+    struct shmid_ds buf;
+    int shmid_check = shmctl(shm->shmid, IPC_STAT, &buf);
+    printf("INITIAL %d [0][%d]: %d attached processes\n", shm->shmid, shmid_check, (int)buf.shm_nattch);
+    
+    // Print all shm values
+    printf("SHM maxsensorkeyinfo: %d\n", shm->maxSensorKeyInfo);
+    printf("SHM maxalertkeyinfo : %d\n", shm->maxAlertKeyInfo);
+    printf("SHM shmid: %d\n", shm->shmid);
+
     intqueue = create_queue(config_vals.queue_size);
 
     // Creating unnamed pipes for workers
@@ -173,8 +187,14 @@ void main_initializer() {
     sensor_fd = open("SENSOR_PIPE", O_RDONLY | O_NONBLOCK);
     console_fd = open("CONSOLE_PIPE", O_RDONLY | O_NONBLOCK);
 
-    create_workers(config_vals.nr_workers, shm->shmid);
+    // Creating workers and it's own shared memory
+    worker_shm = create_worker_queue(config_vals.max_sensors);
+    create_workers(config_vals.nr_workers, shm->shmid, worker_shm->shmid);
+    
+    // Creating watcher
     create_watcher(shm->shmid);
+
+    // Creating threads
     create_threads();
 }
 

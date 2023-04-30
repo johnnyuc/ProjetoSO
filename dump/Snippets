@@ -32,3 +32,96 @@ for (int i = 0; i < SHM->maxSensorKeyInfo; i++) {
     printf("\taverageValue: %f\n", SHM->sensorKeyInfoArray[i].averageValue);
     printf("\tupdateCount: %d\n", SHM->sensorKeyInfoArray[i].updateCount);
 }
+
+
+// SHM dos workers
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <pthread.h>
+
+#define SHM_KEY 1234
+#define MAX_CHILDREN 10
+
+typedef struct {
+    int task_id; // ID da tarefa
+    int completed; // 0 se ainda não foi completada, 1 se já foi completada
+} Task;
+
+typedef struct {
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    int num_children;
+    Task tasks[MAX_CHILDREN];
+} SharedMemory;
+
+int main() {
+    int shmid;
+    SharedMemory *shared_memory;
+    pid_t pid[MAX_CHILDREN];
+
+    // Cria a shared memory
+    shmid = shmget(SHM_KEY, sizeof(SharedMemory), IPC_CREAT | 0666);
+    if (shmid < 0) {
+        perror("Erro ao criar a shared memory");
+        exit(EXIT_FAILURE);
+    }
+
+    // Anexa a shared memory ao processo atual
+    shared_memory = (SharedMemory*) shmat(shmid, NULL, 0);
+    if (shared_memory == (void*) -1) {
+        perror("Erro ao anexar a shared memory");
+        exit(EXIT_FAILURE);
+    }
+
+    // Inicializa os mutexes e as variáveis de condição da shared memory
+    pthread_mutex_init(&shared_memory->mutex, NULL);
+    pthread_cond_init(&shared_memory->cond, NULL);
+    shared_memory->num_children = 0;
+    for (int i = 0; i < MAX_CHILDREN; i++) {
+        shared_memory->tasks[i].task_id = -1;
+        shared_memory->tasks[i].completed = 0;
+    }
+
+    // Cria os processos filhos
+    for (int i = 0; i < MAX_CHILDREN; i++) {
+        pid[i] = fork();
+        if (pid[i] < 0) {
+            perror("Erro ao criar processo filho");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid[i] == 0) {
+            // Processo filho
+            while (1) {
+                // Espera por uma tarefa
+                pthread_mutex_lock(&shared_memory->mutex);
+                while (shared_memory->num_children == 0) {
+                    pthread_cond_wait(&shared_memory->cond, &shared_memory->mutex);
+                }
+                // Procura por uma tarefa que ainda não tenha sido completada
+                int task_id = -1;
+                for (int j = 0; j < MAX_CHILDREN; j++) {
+                    if (shared_memory->tasks[j].completed == 0) {
+                        task_id = shared_memory->tasks[j].task_id;
+                        shared_memory->tasks[j].completed = 1;
+                        break;
+                    }
+                }
+                // Se não houver nenhuma tarefa por fazer, termina o processo
+                if (task_id == -1) {
+                    pthread_mutex_unlock(&shared_memory->mutex);
+                    break;
+                }
+                pthread_mutex_unlock(&shared_memory->mutex);
+                // Executa a tarefa
+                printf("Processo filho %d: executando tarefa %d\n", getpid(), task_id);
+                sleep(1);
+                printf("Processo filho %d: tarefa %d concluída\n", getpid(), task_id);
+            }
+        }
+    }
+}

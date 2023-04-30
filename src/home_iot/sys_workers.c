@@ -20,7 +20,7 @@ void create_unnamed_pipes(int **pipes_fd, int nr_workers) {
 }
 
 // Workers
-int create_workers(int nr_workers, int shmid) {
+int create_workers(int nr_workers, int shmid, int worker_shmid) {
     pid_t pid;
     for (int i = 0; i < nr_workers; i++) {
         pid = fork();
@@ -28,26 +28,28 @@ int create_workers(int nr_workers, int shmid) {
             // Child process
             sprintf(log_buffer, "WORKER PROCESS %d CREATED\n", getpid());
             log_writer(log_buffer);
+
             close(pipes_fd[i][1]); // Close write end of pipe
-            worker_tasks(shmid, pipes_fd[i]); // Main worker function
+            SharedMemory *shm = attach_shm(shmid);
+            WorkerSHM *worker_shm = attach_worker_shm(worker_shmid);
+
+            worker_tasks(i, worker_shm, shm, pipes_fd[i]); // Main worker function
+            detach_shm(shm);
+
             sprintf(log_buffer, "WORKER PROCESS %d ENDED\n", getpid());
             log_writer(log_buffer);
             exit(EXIT_SUCCESS);
         } 
     }
- 
-    // Waiting for all child processes to finish
-    for (int i = 0; i < nr_workers; i++) {
-        wait(NULL);
-    }
     return 0;
 }
 
 // Main worker function
-int worker_tasks(int shmid, int *pipe_fd) {
+int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe_fd) {
     char llog_buffer[BUFFER_MESSAGE];
     char *command;
-    SharedMemory *shm = attach_shm(shmid);
+
+    printf("WORKER %d STARTED ATTACHED TO %d\n", selfid, worker_shm->shmid);
 
     while (1) {
         read(pipe_fd[0], llog_buffer, BUFFER_MESSAGE);
@@ -68,7 +70,5 @@ int worker_tasks(int shmid, int *pipe_fd) {
         }
         pthread_mutex_unlock(&shm->mutex);
     }
-
-    detach_shm(shm);
     return 0;
 }
