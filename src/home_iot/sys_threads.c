@@ -87,7 +87,7 @@ void *console_reader_function() {
         if (read(console_fd, buffer, BUFFER_MESSAGE) > 0) {
             // Write to queue
             enqueue(intqueue, buffer);
-            printf("SENSOR READER: %s\n", buffer);
+            printf("CONSOLE READER: %s\n", buffer);
         }
     }
     return NULL;
