@@ -12,3 +12,6 @@ bin/*
 # logs
 logs/*
 !logs/.gitkeep
+
+# dump
+dump/*

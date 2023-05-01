@@ -1,8 +1,3 @@
-/**********************************************
-* Author: Johnny Fernandes 2021190668         *
-* LEI UC 2022-23 - Sistemas Operativos        *
-**********************************************/
-
 #include "sys_manager.h"
 #include "sys_intqueue.h"
 

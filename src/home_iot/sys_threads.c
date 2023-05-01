@@ -1,8 +1,3 @@
-/**********************************************
-* Author: Johnny Fernandes 2021190668         *
-* LEI UC 2022-23 - Sistemas Operativos        *
-**********************************************/
-
 #include "sys_manager.h"
 #include "sys_threads.h"
 #include "sys_intqueue.h"
@@ -157,6 +152,7 @@ void *dispatcher_function() {
 
     // Dispatcher function
     while (1) {
+        print_worker_queue(worker_shm);
         // Takes one message from queue
         char *buffer = dequeue(intqueue);
         // Places it into the first avaialble worker pipe

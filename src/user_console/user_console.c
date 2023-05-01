@@ -1,8 +1,3 @@
-/**********************************************
-* Author: Johnny Fernandes 2021190668         *
-* LEI UC 2022-23 - Sistemas Operativos        *
-**********************************************/
-
 #include "user_console.h"
 
 // Global variables for the console_id and the pipe file descriptor

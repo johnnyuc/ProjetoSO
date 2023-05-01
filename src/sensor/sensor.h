@@ -1,6 +1,3 @@
-// Author: Johnny Fernandes 2021190668
-// LEI UC 2022-23 - Sistemas Operativos
-
 #ifndef IOT_PROJECT_SENSOR_H
 #define IOT_PROJECT_SENSOR_H
 

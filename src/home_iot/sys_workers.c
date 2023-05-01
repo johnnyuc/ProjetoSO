@@ -1,8 +1,3 @@
-/**********************************************
-* Author: Johnny Fernandes 2021190668         *
-* LEI UC 2022-23 - Sistemas Operativos        *
-**********************************************/
-
 #include "sys_manager.h"
 #include "sys_workers.h"
 #include "sys_shm.h"
@@ -69,17 +64,13 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
     int num_tokens;
 
     while (1) {
-        printf("Attached to SHM and Array has address: %p\n", (void *) shm);
-        printf("Where first available alert address is: %p\n", (void *) &shm->alertKeyInfoArray[0]);
-        printf("With data-> Key: %s, Min: %f, Max: %f\n", shm->alertKeyInfoArray[0].key, shm->alertKeyInfoArray[0].min, shm->alertKeyInfoArray[0].max);
-        printf("Where key address is: %p\n", (void *) &shm->alertKeyInfoArray[0].key);
-
         read(pipe_fd[0], llog_buffer, BUFFER_MESSAGE);
         num_tokens = split_message(llog_buffer, tokens);
 
         if (num_tokens > 0) {
             if (strcmp(tokens[1], "STATS") == 0) {
-                
+                printf("Worker %d received message: %s\n", selfid, tokens[1]);
+                print_shared_memory(shm);
             } else if (strcmp(tokens[1], "RESET") == 0) {
                 
             } else if (strcmp(tokens[1], "SENSORS") == 0) {
@@ -95,7 +86,9 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
             }
         }
         //print_worker_queue(worker_shm);
+        printf("Trying to enqueue worker %d\n", selfid);
         enqueue_worker(worker_shm, selfid);
+        printf("Enqueued worker %d\n", selfid);
     }
     return 0;
 }
