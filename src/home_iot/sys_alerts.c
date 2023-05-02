@@ -51,7 +51,7 @@ int watcher_tasks(SharedMemory *shm, int msgid) {
                 if (shm->sensorKeyInfoArray[i].lastValue < shm->alertKeyInfoArray[i].min ||
                     shm->sensorKeyInfoArray[i].lastValue > shm->alertKeyInfoArray[i].max) {
                     // Send alert message through message queue
-                    msg.msg_type = shm->alertKeyInfoArray[i].id;
+                    msg.msg_type = shm->alertKeyInfoArray[i].console_id;
                     sprintf(msg.msg_text, "ALERT ID %s WITH KEY: %s GOT VALUE: %d (RANGE)", 
                         shm->alertKeyInfoArray[i].key, shm->alertKeyInfoArray[i].key, shm->sensorKeyInfoArray[i].lastValue);
                     msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);

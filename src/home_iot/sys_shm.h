@@ -24,6 +24,7 @@ typedef struct SensorKeyInfo {
 } SensorKeyInfo;
 
 typedef struct AlertKeyInfo {
+    int console_id;
     char id[MAX_LEN];
     char key[MAX_LEN];
     float min;
@@ -94,7 +95,7 @@ int insert_sensor_key(SharedMemory* sharedMemory, char* key, int lastValue);
 int reset_sensor_data(SharedMemory *sharedMemory);
 
 // Alert keys
-int insert_alert_key(SharedMemory* sharedMemory, char *id, char* key, float min, float max);
+int insert_alert_key(SharedMemory* sharedMemory, int console_id, char *id, char* key, float min, float max);
 int remove_alert_key(SharedMemory *sharedMemory, char *key);
 
 #endif //IOT_PROJECT_SHM_H

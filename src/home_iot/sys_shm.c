@@ -224,7 +224,7 @@ int reset_sensor_data(SharedMemory *sharedMemory) {
 }
 
 // Function to insert a new alert key - it doesn't update
-int insert_alert_key(SharedMemory *sharedMemory, char *id, char *key, float min, float max) {
+int insert_alert_key(SharedMemory *sharedMemory, int console_id, char *id, char *key, float min, float max) {
     // Locks mutex
     pthread_mutex_lock(&sharedMemory->mutex);
 
@@ -247,6 +247,7 @@ int insert_alert_key(SharedMemory *sharedMemory, char *id, char *key, float min,
     // Insert new alert key
     strcpy(sharedMemory->alertKeyInfoArray[i].id, id);
     strcpy(sharedMemory->alertKeyInfoArray[i].key, key);
+    sharedMemory->alertKeyInfoArray[i].console_id = console_id;
     sharedMemory->alertKeyInfoArray[i].min = min;
     sharedMemory->alertKeyInfoArray[i].max = max;
 

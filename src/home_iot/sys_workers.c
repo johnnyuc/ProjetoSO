@@ -85,7 +85,7 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
             } else if (strcmp(tokens[1], "SENSORS") == 0) {
                 
             } else if (strcmp(tokens[1], "ADD_ALERT") == 0) {
-                int result = insert_alert_key(shm, tokens[3], atoi(tokens[0]), atof(tokens[4]), atof(tokens[5]));
+                int result = insert_alert_key(shm, atoi(tokens[0]), tokens[2], tokens[3], atoi(tokens[4]), atoi(tokens[5]));
                 if (result == 0) {
                     sprintf(llog_buffer, "ALERT %s ADDED\n", tokens[2]);
                     log_writer(llog_buffer);
