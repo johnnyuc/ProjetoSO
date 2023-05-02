@@ -11,6 +11,9 @@
 #include <unistd.h> // open, close, read, write
 #include <fcntl.h> // O_RDONLY O_WRONLY
 #include <errno.h> // errno
+#include <sys/ipc.h> // ftok
+#include <sys/msg.h> // msgget, msgsnd, msgrcv
+
 
 // Defines
 #define CONSOLE_PIPE "CONSOLE_PIPE"
@@ -18,5 +21,11 @@
 #define MAX_ARGS 5
 #define MIN_LEN 3
 #define MAX_LEN 32
+
+// Structs
+typedef struct msgqueue {
+    long msg_type;
+    char msg_text[BUFFER_MESSAGE];
+} msgqueue;
 
 #endif //IOT_PROJECT_USER_CONSOLE_H

@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <sys/msg.h>
 
 // Defines
 #define BUFFER_MESSAGE 256
@@ -23,6 +24,11 @@ typedef struct ConfigValues {
     int max_sensors;
     int max_alerts;
 } ConfigValues;
+
+typedef struct msgqueue {
+    long msg_type;
+    char msg_text[BUFFER_MESSAGE];
+} msgqueue;
 
 // Functions
 void handle_signint(int sig);

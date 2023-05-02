@@ -1,5 +1,5 @@
 10 # Queue size for INTERNAL_QUEUE
 5 # Number of worker processes
-300 # Max keys stored in SHM (Shared memory)
+6 # Max keys stored in SHM (Shared memory)
 5 # Max sensors
 8 # Max alerts

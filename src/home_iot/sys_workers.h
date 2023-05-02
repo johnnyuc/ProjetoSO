@@ -12,7 +12,7 @@
 
 // Functions
 void create_unnamed_pipes(int **pipes_fd, int nr_workers);
-int create_workers(int nr_workers, int shmid, int worker_shmid);
-int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe_fd);
+int create_workers(int nr_workers, int shmid, int worker_shmid, int msgid);
+int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe_fd, int msgid);
 
 #endif //IOT_PROJECT_WORKERS_H

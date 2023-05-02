@@ -1,8 +1,9 @@
 #include "user_console.h"
 
 // Global variables for the console_id and the pipe file descriptor
-char *console_id[MAX_LEN];
+int console_id;
 int console_fd;
+int msgid;
 
 // Function to handle the SIGINT signal
 void handle_sigint(int sig) {
@@ -48,7 +49,7 @@ int alnum_validation(const char *str, int onlynum) {
 // Function to format the command to be sent to the server
 char *pipe_format(char *result, char argv[MAX_ARGS][MAX_LEN], int argc) {
     // Prepend *console_id
-    int pos = sprintf(result, "%s#", *console_id);
+    int pos = sprintf(result, "%d#", console_id);
 
     // Convert the arguments to uppercase and join them with #
     for (int i = 0; i < argc; i++) {
@@ -128,7 +129,7 @@ void *writer_function() {
     
     // Announce connection to server
     printf("PIPE OPENED, FD: %d\n", console_fd);
-    printf("CONSOLE %s CONNECTED TO SERVER\n\n", *console_id);
+    printf("CONSOLE %d CONNECTED TO SERVER\n\n", console_id);
     
     // Print menu
     printf("Menu options:\n");
@@ -169,30 +170,36 @@ void *writer_function() {
         }
         memset(command, 0, sizeof(command));
         // Prevent pipe saturation - same rule as sensor
-        usleep(0.25 * 1000000);
+        // usleep(0.25 * 1000000);
     }
     return NULL;
 }
 
 void *reader_function() {
-    // Code to be implemented
     // Message queue
+    msgqueue msg;
+
+    while (1) { 
+        msgrcv(msgid, &msg, sizeof(msg), console_id, 0);
+        printf("%s\n", msg.msg_text);
+        
+    }
+    
     return NULL;
 }
 
 void main_initializer(char *argv[]) {
-    // Define console_id
-    *console_id = argv[1];
-
     // Check if the console_id is valid
-    if (strlen(*console_id) < MIN_LEN || strlen(*console_id) > MAX_LEN) {
-        printf("CONSOLE LENGTH SHOULD BE BETWEEN 3 AND 32\n");
+    if (!alnum_validation(argv[1], 1)) {
+        printf("CONSOLE_ID SHOULD ONLY CONTAIN NUMERIC CHARACTERS\n");
         exit(EXIT_FAILURE);
+    } else {
+        console_id = atoi(argv[1]);
     }
 
     // Check if the console_id is valid
-    if (!alnum_validation(*console_id, 0)) {
-        printf("CONSOLE_ID SHOULD ONLY CONTAIN ALPHANUMERIC CHARACTERS\n");
+    if (console_id < 1) {
+        printf("CONSOLE ID SHOULD BE OVER 0\n");
         exit(EXIT_FAILURE);
     }
 
@@ -227,6 +234,10 @@ int main(int argc, char *argv[]) {
     // Configure signal handlers
     signal(SIGINT, handle_sigint);
 
+    // Create message queue
+    key_t key = ftok(".", 'a');
+    msgid = msgget(key, IPC_CREAT | 0666);
+    
     // Run user_console
     main_initializer(argv);
     return 0;

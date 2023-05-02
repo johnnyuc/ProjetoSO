@@ -43,7 +43,7 @@ void sensor_run(SensorArgs args) {
         // Generate random value
         int value = (rand() % (args.max_value - args.min_value + 1)) + args.min_value;
         char msg[BUFFER_MESSAGE];
-        sprintf(msg, "%s#%s#%d", args.sensor_id, args.key, value);
+        sprintf(msg, "SENSOR#%s#%s#%d", args.sensor_id, args.key, value);
         printf("SENDING: %s\n", msg);
         // Send the message
         int write_code = write(sensor_fd, msg, strlen(msg));

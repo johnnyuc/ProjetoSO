@@ -1,32 +1,35 @@
 #include "sys_manager.h"
 #include "sys_shm.h"
 
+#include <errno.h>
+
 // System global variables [created in sys_manager.c]
 extern char log_buffer[BUFFER_MESSAGE];
 
 // Function to create shared memory
-SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo) {
-    size_t shmsize = sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) + (sizeof(AlertKeyInfo) * maxAlertKeyInfo);
+SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo, int maxSensors) {
+    //size_t shmsize = sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) + (sizeof(AlertKeyInfo) * maxAlertKeyInfo);
+    size_t shmsize = sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) + (sizeof(AlertKeyInfo) * maxAlertKeyInfo) + (sizeof(char*) * maxSensors);
     int shmid = shmget(IPC_PRIVATE, shmsize, 0666 | IPC_CREAT);
-    if (shmid == -1) {
-        sprintf(log_buffer, "SHM: ERROR CREATING SHARED MEMORY\n");
-        log_writer(log_buffer);
-        exit(EXIT_FAILURE);
-    }
-
+    
     sprintf(log_buffer, "SHARED MEMORY %d CREATED\n", shmid);
     log_writer(log_buffer);
 
     // Object to be shared
     SharedMemory *sharedMemory = (SharedMemory *) shmat(shmid, NULL, 0);
-    if (sharedMemory == (void *) -1) {
-        sprintf(log_buffer, "SHM: ERROR ATTACHING SHARED MEMORY\n");
-        log_writer(log_buffer);
-        exit(EXIT_FAILURE);
-    }
 
     // Initialize shared memory
-    pthread_mutex_init(&sharedMemory->mutex, NULL);
+    pthread_mutexattr_t attrs;
+    pthread_mutexattr_init(&attrs);
+    pthread_mutexattr_setpshared(&attrs, PTHREAD_PROCESS_SHARED);
+
+    pthread_condattr_t alert_attrs;
+    pthread_condattr_init(&alert_attrs);
+    pthread_condattr_setpshared(&alert_attrs, PTHREAD_PROCESS_SHARED);
+
+    pthread_mutex_init(&sharedMemory->mutex, &attrs);
+    pthread_cond_init(&sharedMemory->alert, &alert_attrs);
+    sharedMemory->maxSensors = maxSensors;
     sharedMemory->maxSensorKeyInfo = maxSensorKeyInfo;
     sharedMemory->maxAlertKeyInfo = maxAlertKeyInfo;
     sharedMemory->shmid = shmid;
@@ -51,6 +54,17 @@ SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo) {
     }
     sharedMemory->alertKeyInfoArray = alertKeyInfoArray;
 
+    // Allocate memory for strings array directly in shared memory
+    char **sensorsArray = (char**)((char*)sharedMemory + sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) + (sizeof(AlertKeyInfo) * maxAlertKeyInfo));
+    for (int i = 0; i < maxSensors; i++) {
+        sensorsArray[i] = (char*)((char*)sharedMemory + sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) \
+        + (sizeof(AlertKeyInfo) * maxAlertKeyInfo) + (sizeof(char*) * maxSensors) + (sizeof(char) * MAX_LEN * i));
+        for (int j = 0; j < MAX_LEN; j++) {
+            sensorsArray[i][j] = '\0';
+        }
+    }
+    sharedMemory->sensors = sensorsArray;
+
     sprintf(log_buffer, "SHARED MEMORY %d FULLY INITIALIZED\n", shmid);
     log_writer(log_buffer);
 
@@ -61,11 +75,11 @@ SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo) {
 SharedMemory *attach_shm(int shmid) {
     SharedMemory *sharedMemory = (SharedMemory *)shmat(shmid, NULL, 0);
     if (sharedMemory == (void *)-1) {
-        sprintf(log_buffer, "SHM: ERROR ATTACHING SHARED MEMORY\n");
+        sprintf(log_buffer, "WORKER SHM: ERROR ATTACHING SHARED MEMORY\n");
         log_writer(log_buffer);
         exit(EXIT_FAILURE);
     } else {
-        sprintf(log_buffer, "SHARED MEMORY %d ATTACHED PID: %d\n", shmid, getpid());
+        sprintf(log_buffer, "WORKER %d ATTACHED TO SHARED MEMORY %d\n", getpid(), shmid);
         log_writer(log_buffer);
     }
     return sharedMemory;
@@ -122,20 +136,43 @@ void print_shared_memory(SharedMemory *sharedMemory) {
             sharedMemory->alertKeyInfoArray[i].min,
             sharedMemory->alertKeyInfoArray[i].max);
     }
+
+    printf("SENSORS:\n");
+    for (int i = 0; i < sharedMemory->maxSensors; i++) {
+        //if (strcmp(sharedMemory->sensors[i], "") == 0) continue;
+        printf("  Sensor: %s\n", sharedMemory->sensors[i]);
+    }
     
     pthread_mutex_unlock(&sharedMemory->mutex);
 }
 
 // Missing functions to read, write, remove, update and search for sensor and alert key info
-void insert_sensor_key(SharedMemory* sharedMemory, char* key, int lastValue, int minValue, int maxValue, double averageValue, int updateCount) {
+int insert_sensor_key(SharedMemory* sharedMemory, char* key, int lastValue) {
+    // Locks mutex
     pthread_mutex_lock(&sharedMemory->mutex);
+    //printf("INSERTING DATA: %s, %d\n", key, lastValue);
 
+    // Check if sensor key already exists
     int i = 0;
     while (i < sharedMemory->maxSensorKeyInfo && sharedMemory->sensorKeyInfoArray[i].key[0] != '\0') {
         if (strcmp(sharedMemory->sensorKeyInfoArray[i].key, key) == 0) {
-            // A sensor key with the same name already exists
+            // A sensor key with the same name already exists, so proceed to update it
+            sharedMemory->sensorKeyInfoArray[i].lastValue = lastValue;
+            sharedMemory->sensorKeyInfoArray[i].averageValue = (sharedMemory->sensorKeyInfoArray[i].averageValue*sharedMemory->sensorKeyInfoArray[i].updateCount \
+            + lastValue) / (sharedMemory->sensorKeyInfoArray[i].updateCount+1);
+            sharedMemory->sensorKeyInfoArray[i].updateCount++;
+            if (lastValue < sharedMemory->sensorKeyInfoArray[i].minValue) sharedMemory->sensorKeyInfoArray[i].minValue = lastValue;
+            if (lastValue > sharedMemory->sensorKeyInfoArray[i].maxValue) sharedMemory->sensorKeyInfoArray[i].maxValue = lastValue;
+            
+            // Search all alert keys to see if this sensor key is in any of them
+            for (int j = 0; j < sharedMemory->maxAlertKeyInfo; j++) {
+                if (strcmp(sharedMemory->alertKeyInfoArray[j].key, key) == 0) {
+                    // Found match, send signal to watcher process
+                    pthread_cond_broadcast(&sharedMemory->alert);
+                }
+            }
             pthread_mutex_unlock(&sharedMemory->mutex);
-            return;
+            return 1;
         }
         i++;
     }
@@ -143,125 +180,104 @@ void insert_sensor_key(SharedMemory* sharedMemory, char* key, int lastValue, int
     if (i == sharedMemory->maxSensorKeyInfo) {
         // Array is full
         pthread_mutex_unlock(&sharedMemory->mutex);
-        return;
+        return 2;
     }
 
     // Insert new sensor key
     strcpy(sharedMemory->sensorKeyInfoArray[i].key, key);
     sharedMemory->sensorKeyInfoArray[i].lastValue = lastValue;
-    sharedMemory->sensorKeyInfoArray[i].minValue = minValue;
-    sharedMemory->sensorKeyInfoArray[i].maxValue = maxValue;
-    sharedMemory->sensorKeyInfoArray[i].averageValue = averageValue;
-    sharedMemory->sensorKeyInfoArray[i].updateCount = updateCount;
+    sharedMemory->sensorKeyInfoArray[i].minValue = lastValue;
+    sharedMemory->sensorKeyInfoArray[i].maxValue = lastValue;
+    sharedMemory->sensorKeyInfoArray[i].averageValue = lastValue;
+    sharedMemory->sensorKeyInfoArray[i].updateCount++;
+    // Adding sensor name to sensors array
+    strcpy(sharedMemory->sensors[sharedMemory->sensorCount], key);
+    sharedMemory->sensorCount++;
 
     pthread_mutex_unlock(&sharedMemory->mutex);
+    return 0;
 }
 
 // Remove a SensorKeyInfo com a chave especificada da estrutura SharedMemory
-void remove_sensor_key(SharedMemory *sharedMemory, char *key) {
-    // Encontra o índice da chave no array
-    int index = -1;
-    for (int i = 0; i < sharedMemory->maxSensorKeyInfo; i++) {
-        if (strcmp(sharedMemory->sensorKeyInfoArray[i].key, key) == 0) {
-            index = i;
-            break;
-        }
-    }
-
-    // Se a chave não foi encontrada, retorna
-    if (index == -1) {
-        printf("Chave de sensor não encontrada: %s\n", key);
-        return;
-    }
-
-    // Remove a chave e atualiza o tamanho do array
+int reset_sensor_data(SharedMemory *sharedMemory) {
+    // Locks mutex
     pthread_mutex_lock(&sharedMemory->mutex);
-    memmove(&sharedMemory->sensorKeyInfoArray[index], &sharedMemory->sensorKeyInfoArray[index+1], 
-            (sharedMemory->maxSensorKeyInfo - index - 1) * sizeof(SensorKeyInfo));
-    sharedMemory->maxSensorKeyInfo--;
-    pthread_mutex_unlock(&sharedMemory->mutex);
 
-    printf("Chave de sensor removida: %s\n", key);
+    // Reset sensor key info
+    for (int i = 0; i < sharedMemory->maxSensorKeyInfo; i++) {
+        sharedMemory->sensorKeyInfoArray[i].key[0] = '\0';
+        sharedMemory->sensorKeyInfoArray[i].lastValue = 0;
+        sharedMemory->sensorKeyInfoArray[i].minValue = 0;
+        sharedMemory->sensorKeyInfoArray[i].maxValue = 0;
+        sharedMemory->sensorKeyInfoArray[i].averageValue = 0;
+        sharedMemory->sensorKeyInfoArray[i].updateCount = 0;
+    }
+
+    // Reset sensors array
+    for (int i = 0; i < sharedMemory->maxSensors; i++) {
+        sharedMemory->sensors[i][0] = '\0';
+    }
+    sharedMemory->sensorCount = 0;
+
+    pthread_mutex_unlock(&sharedMemory->mutex);
+    return 0;
 }
 
-void insert_alert_key(SharedMemory *sharedMemory, char *key, float min, float max) {
+// Function to insert a new alert key - it doesn't update
+int insert_alert_key(SharedMemory *sharedMemory, char *id, char *key, float min, float max) {
+    // Locks mutex
     pthread_mutex_lock(&sharedMemory->mutex);
 
+    // Checks if key already exists
     int i = 0;
     while (i < sharedMemory->maxAlertKeyInfo && strcmp(sharedMemory->alertKeyInfoArray[i].key, "") != 0) {
-        printf("Alert key: %s\n", sharedMemory->alertKeyInfoArray[i].key);
         if (strcmp(sharedMemory->alertKeyInfoArray[i].key, key) == 0) {
-            // An alert key with the same name already exists
             pthread_mutex_unlock(&sharedMemory->mutex);
-            return;
+            return 1;
         }
         i++;
     }
 
+    // Check if it's full
+    if (i == sharedMemory->maxAlertKeyInfo) {
+        pthread_mutex_unlock(&sharedMemory->mutex);
+        return 2;
+    }
+
     // Insert new alert key
+    strcpy(sharedMemory->alertKeyInfoArray[i].id, id);
     strcpy(sharedMemory->alertKeyInfoArray[i].key, key);
     sharedMemory->alertKeyInfoArray[i].min = min;
     sharedMemory->alertKeyInfoArray[i].max = max;
 
     pthread_mutex_unlock(&sharedMemory->mutex);
+    return 0;
 }
 
-// Remove uma AlertKeyInfo com a chave especificada da estrutura SharedMemory
-void remove_alert_key(SharedMemory *sharedMemory, char *key) {
-    // Encontra o índice da chave no array
-    int index = -1;
-    for (int i = 0; i < sharedMemory->maxAlertKeyInfo; i++) {
-        printf("Alert key: %s\n", sharedMemory->alertKeyInfoArray[i].key);
-        if (strcmp(sharedMemory->alertKeyInfoArray[i].key, key) == 0) {
-            index = i;
-            break;
-        }
-    }
-
-    // Se a chave não foi encontrada, retorna
-    if (index == -1) {
-        printf("Chave de alerta não encontrada: %s\n", key);
-        return;
-    }
-
-    // Remove a chave e atualiza o tamanho do array
+// Function to remove an alert key
+int remove_alert_key(SharedMemory *sharedMemory, char *key) {
+    // Locks mutex
     pthread_mutex_lock(&sharedMemory->mutex);
-    memmove(&sharedMemory->alertKeyInfoArray[index], &sharedMemory->alertKeyInfoArray[index+1], 
-            (sharedMemory->maxAlertKeyInfo - index - 1) * sizeof(AlertKeyInfo));
-    sharedMemory->maxAlertKeyInfo--;
+
+    // Checks if key exists
+    int i = 0;
+    while (i < sharedMemory->maxAlertKeyInfo && strcmp(sharedMemory->alertKeyInfoArray[i].key, key) != 0) {
+        i++;
+    }
+
+    // Check if the key wasn't found
+    if (i == sharedMemory->maxAlertKeyInfo) {
+        pthread_mutex_unlock(&sharedMemory->mutex);
+        return 1;
+    }
+
+    // Remove alert key
+    strcpy(sharedMemory->alertKeyInfoArray[i].key, "");
+    sharedMemory->alertKeyInfoArray[i].min = 0;
+    sharedMemory->alertKeyInfoArray[i].max = 0;
+
     pthread_mutex_unlock(&sharedMemory->mutex);
-
-    printf("Chave de alerta removida: %s\n", key);
-}
-
-void sensor_key(SharedMemory* sharedMemory, char* key, int new_value) {
-    // Procura pelo nó que possui a chave desejada
-    for (int i = 0; i < sharedMemory->maxSensorKeyInfo; i++) {
-        if (strcmp(sharedMemory->sensorKeyInfoArray[i].key, key) == 0) {
-            // Encontrou a chave, atualiza o valor
-            sharedMemory->sensorKeyInfoArray[i].lastValue = new_value;
-            return;
-        }
-    }
-
-    strcpy(sharedMemory->sensorKeyInfoArray[sharedMemory->maxSensorKeyInfo].key, key);
-    sharedMemory->sensorKeyInfoArray[sharedMemory->maxSensorKeyInfo].lastValue = new_value;
-    sharedMemory->maxSensorKeyInfo++;
-}
-
-void alert_key(SharedMemory* sharedMemory, char* key, float new_min, float new_max) {
-    for (int i = 0; i < sharedMemory->maxAlertKeyInfo; i++) {
-        if (strcmp(sharedMemory->alertKeyInfoArray[i].key, key) == 0) {
-            sharedMemory->alertKeyInfoArray[i].min = new_min;
-            sharedMemory->alertKeyInfoArray[i].max = new_max;
-            return;
-        }
-    }
-
-    strcpy(sharedMemory->alertKeyInfoArray[sharedMemory->maxAlertKeyInfo].key, key);
-    sharedMemory->alertKeyInfoArray[sharedMemory->maxAlertKeyInfo].min = new_min;
-    sharedMemory->alertKeyInfoArray[sharedMemory->maxAlertKeyInfo].max = new_max;
-    sharedMemory->maxAlertKeyInfo++;
+    return 0;
 }
 
 WorkerSHM *create_worker_queue(int nr_workers) {
@@ -286,8 +302,16 @@ WorkerSHM *create_worker_queue(int nr_workers) {
     }
 
     // Initialize the mutex and condition variable
-    pthread_mutex_init(&worker_shm->mutex, NULL);
-    pthread_cond_init(&worker_shm->cond, NULL);
+    pthread_mutexattr_t attrs;
+    pthread_mutexattr_init(&attrs);
+    pthread_mutexattr_setpshared(&attrs, PTHREAD_PROCESS_SHARED);
+
+    pthread_condattr_t cond_attrs;
+    pthread_condattr_init(&cond_attrs);
+    pthread_condattr_setpshared(&cond_attrs,PTHREAD_PROCESS_SHARED);
+
+    pthread_mutex_init(&worker_shm->mutex, &attrs);
+    pthread_cond_init(&worker_shm->cond, &cond_attrs);
     worker_shm->nr_workers = nr_workers;
     worker_shm->front = worker_shm->rear = -1;
     worker_shm->size = 0;
@@ -301,7 +325,6 @@ WorkerSHM *create_worker_queue(int nr_workers) {
     for (int i = 0; i < nr_workers; i++){
         enqueue_worker(worker_shm, i);
     }
-        
 
     return worker_shm;
 }
@@ -314,7 +337,7 @@ WorkerSHM *attach_worker_queue(int shmid) {
         log_writer(log_buffer);
         exit(EXIT_FAILURE);
     } else {
-        sprintf(log_buffer, "SHARED MEMORY %d ATTACHED PID: %d\n", shmid, getpid());
+        sprintf(log_buffer, "WORKER %d ATTACHED TO QUEUE %d\n", getpid(), shmid);
         log_writer(log_buffer);
     }
     return worker_shm;
@@ -350,7 +373,6 @@ void print_worker_queue(WorkerSHM *worker_shm) {
     // Acquire the mutex before accessing the shared memory
     pthread_mutex_lock(&worker_shm->mutex);
 
-    printf("Worker Queue:\n");
     for(int i = 0; i < worker_shm->size; i++) {
         // Calculate the index of the current element in the queue
         int index = (worker_shm->front + i) % worker_shm->nr_workers;
@@ -366,6 +388,7 @@ void print_worker_queue(WorkerSHM *worker_shm) {
 void enqueue_worker(WorkerSHM *worker_shm, int worker_id) {
     // Acquire the mutex before modifying the shared memory
     pthread_mutex_lock(&worker_shm->mutex);
+
     // Increment the rear index, circularly
     if(worker_shm->size == 0) {
         worker_shm->front = worker_shm->rear = 0;

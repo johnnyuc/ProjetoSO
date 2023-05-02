@@ -5,9 +5,10 @@
 #include <stdlib.h> // Used for NULL
 #include <unistd.h> // Used for fork
 #include <sys/wait.h> // Used for wait
+#include "sys_shm.h" // Used for SharedMemory
 
 // Functions
-int create_watcher(int shmid);
-int watcher_tasks(int shmid);
+int create_watcher(int shmid, int msgid);
+int watcher_tasks(SharedMemory *shm, int msgid);
 
 #endif //IOT_PROJECT_ALERTS_WATCHER_H

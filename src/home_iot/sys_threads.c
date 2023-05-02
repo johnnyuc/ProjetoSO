@@ -137,7 +137,7 @@ void *sensor_reader_function() {
             if (read(sensor_fd, buffer, BUFFER_MESSAGE) > 0) {
                 // Write to queue
                 enqueue(intqueue, buffer);
-                printf("SENSOR READER: %s\n", buffer);
+                //printf("SENSOR READER: %s\n", buffer);
             }
         }
         memset(buffer, 0, BUFFER_MESSAGE);
@@ -148,19 +148,18 @@ void *sensor_reader_function() {
 
 
 void *dispatcher_function() {
-    char llog_buffer[BUFFER_MESSAGE];
+    //char llog_buffer[BUFFER_MESSAGE];
 
     // Dispatcher function
     while (1) {
-        print_worker_queue(worker_shm);
         // Takes one message from queue
         char *buffer = dequeue(intqueue);
         // Places it into the first avaialble worker pipe
         int worker_task = dequeue_worker(worker_shm);
 
         // Write to log
-        sprintf(llog_buffer, "DISPATCHER SENT %s TO WORKER %d\n", buffer, worker_task);
-        log_writer(llog_buffer);
+        //sprintf(llog_buffer, "DISPATCHER SENT %s TO WORKER %d\n", buffer, worker_task);
+        //log_writer(llog_buffer);
         
         // Write to worker pipe
         write(pipes_fd[worker_task][1], buffer, BUFFER_MESSAGE);
