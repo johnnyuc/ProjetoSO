@@ -27,19 +27,24 @@ typedef struct AlertKeyInfo {
     int console_id;
     char id[MAX_LEN];
     char key[MAX_LEN];
-    float min;
-    float max;
+    double min;
+    double max;
 } AlertKeyInfo;
+
+typedef struct Sensor {
+    char id[MAX_LEN];
+    char key[MAX_LEN];
+} Sensor;
 
 // Shared memory main struct
 typedef struct SharedMemory {
     pthread_mutex_t mutex;
     pthread_cond_t alert;
     // Array of sensor keys and alert keys
-    SensorKeyInfo *sensorKeyInfoArray;
-    AlertKeyInfo *alertKeyInfoArray;
+    SensorKeyInfo* sensorKeyInfoArray;
+    AlertKeyInfo* alertKeyInfoArray;
     // Array of sensor
-    char **sensors;
+    Sensor* sensorArray;
     int sensorCount;
     // Max values to iterate
     int maxSensorKeyInfo;
@@ -71,31 +76,31 @@ typedef struct WorkerSHM {
 
 // Connects
 SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo, int maxSensors);
-SharedMemory *attach_shm(int shmid);
-WorkerSHM *create_worker_queue(int nr_workers);
-WorkerSHM *attach_worker_queue(int shmid);
+SharedMemory* attach_shm(int shmid);
+WorkerSHM* create_worker_queue(int nr_workers);
+WorkerSHM* attach_worker_queue(int shmid);
 
 // Disconnects
-void detach_shm(SharedMemory *sharedMemory);
-void remove_shm(SharedMemory *sharedMemory);
-void detach_worker_queue(WorkerSHM *worker_shm);
-void remove_worker_queue(WorkerSHM *worker_shm);
+void detach_shm(SharedMemory* sharedMemory);
+void remove_shm(SharedMemory* sharedMemory);
+void detach_worker_queue(WorkerSHM* worker_shm);
+void remove_worker_queue(WorkerSHM* worker_shm);
 
 // Writes, reads, removes
 // Prints
-void print_shared_memory(SharedMemory *sharedMemory);
-void print_worker_queue(WorkerSHM *worker_shm);
+void print_shared_memory(SharedMemory* sharedMemory);
+void print_worker_queue(WorkerSHM* worker_shm);
 
 // Worker queue
-void enqueue_worker(WorkerSHM *worker_shm, int worker_id);
-int dequeue_worker(WorkerSHM *worker_shm);
+void enqueue_worker(WorkerSHM* worker_shm, int worker_id);
+int dequeue_worker(WorkerSHM* worker_shm);
 
 // Sensor keys
-int insert_sensor_key(SharedMemory* sharedMemory, char* key, int lastValue);
-int reset_sensor_data(SharedMemory *sharedMemory);
+int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastValue);
+int reset_sensor_data(SharedMemory* sharedMemory);
 
 // Alert keys
-int insert_alert_key(SharedMemory* sharedMemory, int console_id, char *id, char* key, float min, float max);
-int remove_alert_key(SharedMemory *sharedMemory, char *key);
+int insert_alert_key(SharedMemory* sharedMemory, int console_id, char* id, char* key, float min, float max);
+int remove_alert_key(SharedMemory* sharedMemory, char* key);
 
 #endif //IOT_PROJECT_SHM_H

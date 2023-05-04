@@ -12,8 +12,6 @@ extern Queue *intqueue;
 extern WorkerSHM *worker_shm;
 extern int **pipes_fd;
 
-#include <sys/select.h>
-
 // Create named pipes
 void create_named_pipes() {
     char *sensor_pipe = "SENSOR_PIPE";
@@ -80,28 +78,34 @@ void *console_reader_function() {
         log_writer(llog_buffer);
         exit(EXIT_FAILURE);
     }
+
+    // Polling
+    struct pollfd pfd;
+    pfd.fd = console_fd;
+    pfd.events = POLLIN;
     
     // Console reader function
     while (1) {
-        // Use select() to wait for data to become available on the console pipe
-        // Safer because it won't nor block nor accept pipe overloading even though client is limited to 0.25s
-        fd_set rfds;
-        FD_ZERO(&rfds);
-        FD_SET(console_fd, &rfds);
-        int result = select(console_fd + 1, &rfds, NULL, NULL, NULL);
-        if (result == -1) {
-            sprintf(llog_buffer, "ERROR READING FROM CONSOLE PIPE. EXITING\n");
-            log_writer(llog_buffer);
-            exit(EXIT_FAILURE);
-        } else if (result > 0 && FD_ISSET(console_fd, &rfds)) {
-            // Data is available on the console pipe, read it
-            if (read(console_fd, buffer, BUFFER_MESSAGE) > 0) {
+        int poll_result = poll(&pfd, 1, -1); // Blocking poll
+        if (poll_result > 0 && (pfd.revents & POLLIN)) {
+            ssize_t bytes_read = read(console_fd, buffer, BUFFER_MESSAGE);
+            if (bytes_read > 0) {
                 // Write to queue
                 enqueue(intqueue, buffer);
                 printf("CONSOLE READER: %s\n", buffer);
             }
+            memset(buffer, 0, BUFFER_MESSAGE);
+        } else if (poll_result > 0 && (pfd.revents & POLLHUP)) {
+            // Reopen the pipe if it was closed
+            close(console_fd);
+            console_fd = open("CONSOLE_PIPE", O_RDONLY | O_NONBLOCK);
+            if (console_fd == -1) {
+                sprintf(llog_buffer, "ERROR OPENING SENSOR PIPE. EXITING\n");
+                log_writer(llog_buffer);
+                exit(EXIT_FAILURE);
+            }
+            pfd.fd = console_fd;
         }
-        memset(buffer, 0, BUFFER_MESSAGE);
     }
 
     return NULL;
@@ -114,33 +118,39 @@ void *sensor_reader_function() {
 
     // Open sensor pipe
     int sensor_fd = open("SENSOR_PIPE", O_RDONLY | O_NONBLOCK);
-    if (sensor_fd == -1) {
-        sprintf(llog_buffer, "ERROR OPENING SENSOR PIPE. EXITING\n");
-        log_writer(llog_buffer);
-        exit(EXIT_FAILURE);
-    }
+        if (sensor_fd == -1) {
+            sprintf(llog_buffer, "ERROR OPENING SENSOR PIPE. EXITING\n");
+            log_writer(llog_buffer);
+            exit(EXIT_FAILURE);
+        }
+
+    // Polling
+    struct pollfd pfd;
+    pfd.fd = sensor_fd;
+    pfd.events = POLLIN;
     
     // Sensor reader function
     while (1) {
-        // Use select() to wait for data to become available on the sensor pipe
-        // Safer because it won't nor block nor accept pipe overloading even though sensor is limited to 0.25s
-        fd_set rfds;
-        FD_ZERO(&rfds);
-        FD_SET(sensor_fd, &rfds);
-        int result = select(sensor_fd + 1, &rfds, NULL, NULL, NULL);
-        if (result == -1) {
-            sprintf(llog_buffer, "ERROR READING FROM SENSOR PIPE. EXITING\n");
-            log_writer(llog_buffer);
-            exit(EXIT_FAILURE);
-        } else if (result > 0 && FD_ISSET(sensor_fd, &rfds)) {
-            // Data is available on the sensor pipe, read it
-            if (read(sensor_fd, buffer, BUFFER_MESSAGE) > 0) {
+        int poll_result = poll(&pfd, 1, -1); // Blocking poll
+        if (poll_result > 0 && (pfd.revents & POLLIN)) {
+            ssize_t bytes_read = read(sensor_fd, buffer, BUFFER_MESSAGE);
+            if (bytes_read > 0) {
                 // Write to queue
                 enqueue(intqueue, buffer);
                 //printf("SENSOR READER: %s\n", buffer);
             }
+            memset(buffer, 0, BUFFER_MESSAGE);
+        } else if (poll_result > 0 && (pfd.revents & POLLHUP)) {
+            // Reopen the pipe if it was closed
+            close(sensor_fd);
+            sensor_fd = open("SENSOR_PIPE", O_RDONLY | O_NONBLOCK);
+            if (sensor_fd == -1) {
+                sprintf(llog_buffer, "ERROR OPENING SENSOR PIPE. EXITING\n");
+                log_writer(llog_buffer);
+                exit(EXIT_FAILURE);
+            }
+            pfd.fd = sensor_fd;
         }
-        memset(buffer, 0, BUFFER_MESSAGE);
     }
 
     return NULL;

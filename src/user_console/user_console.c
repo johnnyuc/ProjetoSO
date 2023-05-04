@@ -63,8 +63,7 @@ char *pipe_format(char *result, char argv[MAX_ARGS][MAX_LEN], int argc) {
     }
     result[pos] = '\0';
 
-    // Remove trailing # 
-    // TODO: probably not needed
+    // Remove trailing #
     if (pos > 0 && result[pos - 1] == '#') {
         result[pos - 1] = '\0';
     }
@@ -169,8 +168,6 @@ void *writer_function() {
             }
         }
         memset(command, 0, sizeof(command));
-        // Prevent pipe saturation - same rule as sensor
-        // usleep(0.25 * 1000000);
     }
     return NULL;
 }
@@ -179,10 +176,9 @@ void *reader_function() {
     // Message queue
     msgqueue msg;
 
-    while (1) { 
+    while (1) {
         msgrcv(msgid, &msg, sizeof(msg), console_id, 0);
         printf("%s\n", msg.msg_text);
-        
     }
     
     return NULL;

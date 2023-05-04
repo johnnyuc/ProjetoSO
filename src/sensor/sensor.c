@@ -33,6 +33,26 @@ int alnum_validation(const char *str, int underscore) {
     return 1;
 }
 
+char *pipe_format(char *msg, SensorArgs args, int value) {
+    // Prepend IDs
+    //int pos = sprintf(msg, "SENSOR#%d#", getpid());
+    int pos = sprintf(msg, "SENSOR#");
+
+    // Convert sensor_id and key to uppercase
+    for (int i = 0; args.sensor_id[i]; i++) {
+        args.sensor_id[i] = toupper(args.sensor_id[i]);
+    }
+
+    for (int i = 0; args.key[i]; i++) {
+        args.key[i] = toupper(args.key[i]);
+    }
+
+    // Append values to the message
+    pos += sprintf(msg+pos, "%s#%s#%d", args.sensor_id, args.key, value);
+
+    return msg;
+}
+
 // Function to generate data and send it to the server
 void sensor_run(SensorArgs args) {
     // Generate random seed of rand()
@@ -40,12 +60,14 @@ void sensor_run(SensorArgs args) {
 
     // Send the message
     while (1) {
+        char msg[BUFFER_MESSAGE];
         // Generate random value
         int value = (rand() % (args.max_value - args.min_value + 1)) + args.min_value;
-        char msg[BUFFER_MESSAGE];
-        sprintf(msg, "SENSOR#%s#%s#%d", args.sensor_id, args.key, value);
-        printf("SENDING: %s\n", msg);
-        // Send the message
+        // Format the message
+        pipe_format(msg, args, value);
+        // Logging
+        printf("SENDING: %s#%s#%d\n", args.sensor_id, args.key, value);
+        // Write to pipe
         int write_code = write(sensor_fd, msg, strlen(msg));
         if (write_code < 0) {
             if (errno == EPIPE) {  // pipe closed by server 
@@ -57,7 +79,6 @@ void sensor_run(SensorArgs args) {
             }
         }
         msgs_sent++;
-        printf("args.interval_secs: %f\n", args.interval_secs);
         // Cannot sleep 0 seconds - pipe saturation
         usleep(args.interval_secs * 1000000);
     }
@@ -121,6 +142,7 @@ int main(int argc, char* argv[]) {
         printf("SYNTAX: %s {SENSOR_ID} {INTERVAL_SECS} {KEY} {MIN_VALUE} {MAX_VALUE}\n", argv[0]);
         exit(EXIT_FAILURE);
     }
+
 
     // Configs signal handlers
     signal(SIGINT, handle_sigint);

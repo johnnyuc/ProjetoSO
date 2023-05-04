@@ -62,60 +62,145 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
     char llog_buffer[BUFFER_MESSAGE];
     char *tokens[MAX_TOKENS];
     int num_tokens;
-
-    printf("%d", msgid);
+    msgqueue msg;
 
     while (1) {
         read(pipe_fd[0], llog_buffer, BUFFER_MESSAGE);
         num_tokens = split_message(llog_buffer, tokens);
+        msg.msg_type = strtol(tokens[0], NULL, 10);
+
+        // Print all tokens
+        //for (int i = 0; i < num_tokens; i++) printf("Token [%d]: %s\n", i, tokens[i]);
 
         if (num_tokens > 0) {
             if (strcmp(tokens[0], "SENSOR") == 0) {
-                int result = insert_sensor_key(shm, tokens[2], atoi(tokens[3]));
-                if (result == 2) {
-                    sprintf(llog_buffer, "SENSOR %s NOT ADDED. FULL\n", tokens[1]);
+                int result = insert_sensor_key(shm, tokens[1], tokens[2], atoi(tokens[3]));
+                if (result == 1) {
+                    sprintf(llog_buffer, "SENSOR %s HAS A DUPLICATED ID. DISCARDING\n", tokens[1]);
+                    log_writer(llog_buffer);
+                } else if (result == 2) {
+                    sprintf(llog_buffer, "SENSOR %s COULD NOT BE ADDED. FULL LIST\n", tokens[1]);
+                    log_writer(llog_buffer);
+                } else if (result == 3) {
+                    sprintf(llog_buffer, "SENSOR KEY LIST IS FULL. DISCARDING DATA\n");
                     log_writer(llog_buffer);
                 }
                 //print_shared_memory(shm);
             } else if (strcmp(tokens[1], "STATS") == 0) {
+                // Message queue
+                sprintf(msg.msg_text, "KEY\t\tLAST\tMIN\tMAX\tAVG\tCOUNT\n");
+                msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                // Looking for values to send
+                for (int i = 0; i < shm->maxSensorKeyInfo; i++) {
+                    if (strcmp(shm->sensorKeyInfoArray[i].key, "") != 0) {
+                        // Message queue
+                        sprintf(msg.msg_text, "%s\t\t%d\t%d\t%d\t%.1f\t%d", 
+                        shm->sensorKeyInfoArray[i].key, 
+                        shm->sensorKeyInfoArray[i].lastValue, 
+                        shm->sensorKeyInfoArray[i].minValue, 
+                        shm->sensorKeyInfoArray[i].maxValue, 
+                        shm->sensorKeyInfoArray[i].averageValue, 
+                        shm->sensorKeyInfoArray[i].updateCount);
+                        msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                    }
+                }
                 print_shared_memory(shm);
+                // Log writer
+                sprintf(llog_buffer, "STATISTICAL DATA REQUESTED BY CONSOLE %s\n", tokens[0]);
+                log_writer(llog_buffer);
             } else if (strcmp(tokens[1], "RESET") == 0) {
-                reset_sensor_data(shm);
-                print_shared_memory(shm);
+                int result = reset_sensor_data(shm);
+                if (result == 0) {
+                    // Message queue
+                    sprintf(msg.msg_text, "OK");
+                    msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                    // Log writer
+                    sprintf(llog_buffer, "STATISTICAL DATA RESET REQUESTED BY CONSOLE %s\n", tokens[0]);
+                    log_writer(llog_buffer);
+                }
             } else if (strcmp(tokens[1], "SENSORS") == 0) {
-                
+                // Message queue
+                sprintf(msg.msg_text, "ID\t\tKEY\n");
+                msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                // Looking for sensors to send
+                for (int i = 0; i < shm->maxSensors; i++) {
+                    if (strcmp(shm->sensorArray[i].id, "") != 0) {
+                        // Message queue
+                        sprintf(msg.msg_text, "%s\t\t%s", 
+                        shm->sensorArray[i].id, 
+                        shm->sensorArray[i].key);
+                        msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                    }
+                }
             } else if (strcmp(tokens[1], "ADD_ALERT") == 0) {
                 int result = insert_alert_key(shm, atoi(tokens[0]), tokens[2], tokens[3], atoi(tokens[4]), atoi(tokens[5]));
-                if (result == 0) {
-                    sprintf(llog_buffer, "ALERT %s ADDED\n", tokens[2]);
+                if (result == 0) { // GOOD
+                    // Message queue
+                    sprintf(msg.msg_text, "OK");
+                    msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                    // Log writer
+                    sprintf(llog_buffer, "NEW ALERT %s ADDED TO LIST BY CONSOLE %s\n", tokens[2], tokens[0]);
                     log_writer(llog_buffer);
-                    // Send to message queue from here
-                } else if (result == 1) {
-                    sprintf(llog_buffer, "ALERT %s ALREADY EXISTS\n", tokens[2]);
+                } else if (result == 1) { // NOT GOOD
+                    // Message queue
+                    sprintf(msg.msg_text, "ERROR");
+                    msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                    // Log writer
+                    sprintf(llog_buffer, "ALERT %s EXISTS. SENT BY CONSOLE %s\n", tokens[2], tokens[0]);
                     log_writer(llog_buffer);
-                    // Send to message queue from here
-                } else if (result == 2) {
-                    sprintf(llog_buffer, "ALERT %s NOT ADDED. FULL\n", tokens[2]);
+                } else if (result == 2) { // NOT GOOD
+                    // Message queue
+                    sprintf(msg.msg_text, "ERROR");
+                    msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                    // Log writer
+                    sprintf(llog_buffer, "ALERT %s NOT ADDED, FULL LIST. SENT BY CONSOLE %s\n", tokens[2], tokens[0]);
                     log_writer(llog_buffer);
-                    // Send to message queue from here
                 }
             } else if (strcmp(tokens[1], "REMOVE_ALERT") == 0 ) {
                 int result = remove_alert_key(shm, tokens[2]);
-                if (result == 1) {
-                    sprintf(llog_buffer, "ALERT %s NOT FOUND\n", tokens[2]);
+                if (result == 0) { // GOOD
+                    // Message queue
+                    sprintf(msg.msg_text, "ERROR");
+                    msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                    // Log writer
+                    sprintf(llog_buffer, "ALERT %s REMOVED FROM LIST BY CONSOLE %s\n", tokens[2], tokens[0]);
+                    log_writer(llog_buffer);
+                } else if (result == 1) { // NOT GOOD
+                    // Message queue
+                    sprintf(msg.msg_text, "ERROR");
+                    msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                    // Log writer
+                    sprintf(llog_buffer, "ALERT %s NOT FOUND INSIDE LIST. LOOKUP BY CONSOLE %s\n", tokens[2], tokens[0]);
                     log_writer(llog_buffer);
                 }
-                // Send to message queue from here
             } else if (strcmp(tokens[1], "LIST_ALERTS") == 0) {
-                
+                // Message queue
+                sprintf(msg.msg_text, "ID\t\tKEY\t\tMIN\tMAX\n");
+                msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                // Looking for alerts to send
+                for (int i = 0; i < shm->maxAlertKeyInfo; i++) {
+                    if (strcmp(shm->alertKeyInfoArray[i].id, "") != 0) {
+                        sprintf(msg.msg_text, "%s\t\t%s\t\t%0.0f\t%0.0f", 
+                        shm->alertKeyInfoArray[i].id,
+                        shm->alertKeyInfoArray[i].key, 
+                        shm->alertKeyInfoArray[i].min, 
+                        shm->alertKeyInfoArray[i].max);
+                        msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                    }
+                }
+                // Log writer
+                sprintf(llog_buffer, "ALERT LIST REQUESTED BY CONSOLE %s\n", tokens[0]);
+                log_writer(llog_buffer);
             }
-
-            // Debug info
-            //print_shared_memory(shm);
-            //print_worker_queue(worker_shm);
         }
+
+        // Debug info
+        //print_shared_memory(shm);
         //print_worker_queue(worker_shm);
+
+        // Enables it to receive new tasks
         enqueue_worker(worker_shm, selfid);
     }
+
     return 0;
 }

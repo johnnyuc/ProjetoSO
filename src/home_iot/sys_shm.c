@@ -9,7 +9,7 @@ extern char log_buffer[BUFFER_MESSAGE];
 // Function to create shared memory
 SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo, int maxSensors) {
     //size_t shmsize = sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) + (sizeof(AlertKeyInfo) * maxAlertKeyInfo);
-    size_t shmsize = sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) + (sizeof(AlertKeyInfo) * maxAlertKeyInfo) + (sizeof(char*) * maxSensors);
+    size_t shmsize = sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) + (sizeof(AlertKeyInfo) * maxAlertKeyInfo) + (sizeof(Sensor) * maxSensors);
     int shmid = shmget(IPC_PRIVATE, shmsize, 0666 | IPC_CREAT);
     
     sprintf(log_buffer, "SHARED MEMORY %d CREATED\n", shmid);
@@ -30,6 +30,7 @@ SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo, int maxSenso
     pthread_mutex_init(&sharedMemory->mutex, &attrs);
     pthread_cond_init(&sharedMemory->alert, &alert_attrs);
     sharedMemory->maxSensors = maxSensors;
+    sharedMemory->sensorCount = 0;
     sharedMemory->maxSensorKeyInfo = maxSensorKeyInfo;
     sharedMemory->maxAlertKeyInfo = maxAlertKeyInfo;
     sharedMemory->shmid = shmid;
@@ -55,15 +56,15 @@ SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo, int maxSenso
     sharedMemory->alertKeyInfoArray = alertKeyInfoArray;
 
     // Allocate memory for strings array directly in shared memory
-    char **sensorsArray = (char**)((char*)sharedMemory + sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) + (sizeof(AlertKeyInfo) * maxAlertKeyInfo));
+    Sensor *sensorArray = (Sensor*)((char*)sharedMemory + sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) + (sizeof(AlertKeyInfo) * maxAlertKeyInfo));
     for (int i = 0; i < maxSensors; i++) {
-        sensorsArray[i] = (char*)((char*)sharedMemory + sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) \
-        + (sizeof(AlertKeyInfo) * maxAlertKeyInfo) + (sizeof(char*) * maxSensors) + (sizeof(char) * MAX_LEN * i));
+        // Initialize nested char array in struct
         for (int j = 0; j < MAX_LEN; j++) {
-            sensorsArray[i][j] = '\0';
+            sensorArray[i].id[j] = '\0';
+            sensorArray[i].key[j] = '\0';
         }
     }
-    sharedMemory->sensors = sensorsArray;
+    sharedMemory->sensorArray = sensorArray;
 
     sprintf(log_buffer, "SHARED MEMORY %d FULLY INITIALIZED\n", shmid);
     log_writer(log_buffer);
@@ -119,7 +120,7 @@ void print_shared_memory(SharedMemory *sharedMemory) {
     printf("SENSOR KEY INFO:\n");
     for (int i = 0; i < sharedMemory->maxSensorKeyInfo; i++) {
         //if (strcmp(sharedMemory->sensorKeyInfoArray[i].key, "") == 0) continue;
-        printf("  Key: %s, Last Value: %d, Min Value: %d, Max Value: %d, Average Value: %.2f, Update Count: %d\n",
+        printf("  Key: %s, Last Value: %d, Min: %d, Max: %d, Av.: %.2f, Count: %d\n",
             sharedMemory->sensorKeyInfoArray[i].key,
             sharedMemory->sensorKeyInfoArray[i].lastValue,
             sharedMemory->sensorKeyInfoArray[i].minValue,
@@ -131,7 +132,7 @@ void print_shared_memory(SharedMemory *sharedMemory) {
     printf("ALERT KEY INFO:\n");
     for (int i = 0; i < sharedMemory->maxAlertKeyInfo; i++) {
         //if (strcmp(sharedMemory->alertKeyInfoArray[i].key, "") == 0) continue;
-        printf("  Key: %s, Min Value: %.2f, Max Value: %.2f\n",
+        printf("  Key: %s, Min: %.2f, Max: %.2f\n",
             sharedMemory->alertKeyInfoArray[i].key,
             sharedMemory->alertKeyInfoArray[i].min,
             sharedMemory->alertKeyInfoArray[i].max);
@@ -140,59 +141,87 @@ void print_shared_memory(SharedMemory *sharedMemory) {
     printf("SENSORS:\n");
     for (int i = 0; i < sharedMemory->maxSensors; i++) {
         //if (strcmp(sharedMemory->sensors[i], "") == 0) continue;
-        printf("  Sensor: %s\n", sharedMemory->sensors[i]);
+        printf("  ID: %s, Key: %s\n",
+            sharedMemory->sensorArray[i].id,
+            sharedMemory->sensorArray[i].key);
     }
     
     pthread_mutex_unlock(&sharedMemory->mutex);
 }
 
 // Missing functions to read, write, remove, update and search for sensor and alert key info
-int insert_sensor_key(SharedMemory* sharedMemory, char* key, int lastValue) {
+int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastValue) {
     // Locks mutex
     pthread_mutex_lock(&sharedMemory->mutex);
-    //printf("INSERTING DATA: %s, %d\n", key, lastValue);
+    //printf("INSERTING DATA: %s, %s, %d\n", id, key, lastValue);
+
+    // Verify if sensor exists in sensorArray
+    int sensor = 0;
+    int found = 0;
+    while (sensor < sharedMemory->sensorCount) {
+        if (strcmp(sharedMemory->sensorArray[sensor].id, id) == 0) {
+            found = 1;
+            if (strcmp(sharedMemory->sensorArray[sensor].key, key) != 0) {
+                // Sensor already exists but key is different, reject
+                pthread_mutex_unlock(&sharedMemory->mutex);
+                return 1;
+            }
+            break;
+        }
+        sensor++;
+    }
+
+    if (found == 0 && sensor == sharedMemory->maxSensors) {
+        // Sensor array is full, reject
+        pthread_mutex_unlock(&sharedMemory->mutex);
+        return 2;
+    }
+
+    if (found == 0) {
+        // Adding sensor name to sensors array
+        strcpy(sharedMemory->sensorArray[sharedMemory->sensorCount].key, key);
+        strcpy(sharedMemory->sensorArray[sharedMemory->sensorCount].id, id);
+        sharedMemory->sensorCount++;
+    }
 
     // Check if sensor key already exists
-    int i = 0;
-    while (i < sharedMemory->maxSensorKeyInfo && sharedMemory->sensorKeyInfoArray[i].key[0] != '\0') {
-        if (strcmp(sharedMemory->sensorKeyInfoArray[i].key, key) == 0) {
+    int insert = 0;
+    while (insert < sharedMemory->maxSensorKeyInfo && sharedMemory->sensorKeyInfoArray[insert].key[0] != '\0') {
+        if (strcmp(sharedMemory->sensorKeyInfoArray[insert].key, key) == 0) {
             // A sensor key with the same name already exists, so proceed to update it
-            sharedMemory->sensorKeyInfoArray[i].lastValue = lastValue;
-            sharedMemory->sensorKeyInfoArray[i].averageValue = (sharedMemory->sensorKeyInfoArray[i].averageValue*sharedMemory->sensorKeyInfoArray[i].updateCount \
-            + lastValue) / (sharedMemory->sensorKeyInfoArray[i].updateCount+1);
-            sharedMemory->sensorKeyInfoArray[i].updateCount++;
-            if (lastValue < sharedMemory->sensorKeyInfoArray[i].minValue) sharedMemory->sensorKeyInfoArray[i].minValue = lastValue;
-            if (lastValue > sharedMemory->sensorKeyInfoArray[i].maxValue) sharedMemory->sensorKeyInfoArray[i].maxValue = lastValue;
+            sharedMemory->sensorKeyInfoArray[insert].lastValue = lastValue;
+            sharedMemory->sensorKeyInfoArray[insert].averageValue = (sharedMemory->sensorKeyInfoArray[insert].averageValue*
+            sharedMemory->sensorKeyInfoArray[insert].updateCount + lastValue) / (sharedMemory->sensorKeyInfoArray[insert].updateCount+1);
+            sharedMemory->sensorKeyInfoArray[insert].updateCount++;
+            if (lastValue < sharedMemory->sensorKeyInfoArray[insert].minValue) sharedMemory->sensorKeyInfoArray[insert].minValue = lastValue;
+            if (lastValue > sharedMemory->sensorKeyInfoArray[insert].maxValue) sharedMemory->sensorKeyInfoArray[insert].maxValue = lastValue;
             
             // Search all alert keys to see if this sensor key is in any of them
-            for (int j = 0; j < sharedMemory->maxAlertKeyInfo; j++) {
-                if (strcmp(sharedMemory->alertKeyInfoArray[j].key, key) == 0) {
+            for (int alert = 0; alert < sharedMemory->maxAlertKeyInfo; alert++) {
+                if (strcmp(sharedMemory->alertKeyInfoArray[alert].key, key) == 0) {
                     // Found match, send signal to watcher process
                     pthread_cond_broadcast(&sharedMemory->alert);
                 }
             }
             pthread_mutex_unlock(&sharedMemory->mutex);
-            return 1;
+            return 0;
         }
-        i++;
+        insert++;
     }
 
-    if (i == sharedMemory->maxSensorKeyInfo) {
+    if (insert == sharedMemory->maxSensorKeyInfo) {
         // Array is full
         pthread_mutex_unlock(&sharedMemory->mutex);
-        return 2;
+        return 3;
     }
 
     // Insert new sensor key
-    strcpy(sharedMemory->sensorKeyInfoArray[i].key, key);
-    sharedMemory->sensorKeyInfoArray[i].lastValue = lastValue;
-    sharedMemory->sensorKeyInfoArray[i].minValue = lastValue;
-    sharedMemory->sensorKeyInfoArray[i].maxValue = lastValue;
-    sharedMemory->sensorKeyInfoArray[i].averageValue = lastValue;
-    sharedMemory->sensorKeyInfoArray[i].updateCount++;
-    // Adding sensor name to sensors array
-    strcpy(sharedMemory->sensors[sharedMemory->sensorCount], key);
-    sharedMemory->sensorCount++;
+    strcpy(sharedMemory->sensorKeyInfoArray[insert].key, key);
+    sharedMemory->sensorKeyInfoArray[insert].lastValue = lastValue;
+    sharedMemory->sensorKeyInfoArray[insert].minValue = lastValue;
+    sharedMemory->sensorKeyInfoArray[insert].maxValue = lastValue;
+    sharedMemory->sensorKeyInfoArray[insert].averageValue = lastValue;
+    sharedMemory->sensorKeyInfoArray[insert].updateCount++;
 
     pthread_mutex_unlock(&sharedMemory->mutex);
     return 0;
@@ -214,8 +243,9 @@ int reset_sensor_data(SharedMemory *sharedMemory) {
     }
 
     // Reset sensors array
-    for (int i = 0; i < sharedMemory->maxSensors; i++) {
-        sharedMemory->sensors[i][0] = '\0';
+    for (int i = 0; i < sharedMemory->sensorCount; i++) {
+        sharedMemory->sensorArray[i].key[0] = '\0';
+        sharedMemory->sensorArray[i].id[0] = '\0';
     }
     sharedMemory->sensorCount = 0;
 
@@ -256,13 +286,13 @@ int insert_alert_key(SharedMemory *sharedMemory, int console_id, char *id, char 
 }
 
 // Function to remove an alert key
-int remove_alert_key(SharedMemory *sharedMemory, char *key) {
+int remove_alert_key(SharedMemory *sharedMemory, char *id) {
     // Locks mutex
     pthread_mutex_lock(&sharedMemory->mutex);
 
     // Checks if key exists
     int i = 0;
-    while (i < sharedMemory->maxAlertKeyInfo && strcmp(sharedMemory->alertKeyInfoArray[i].key, key) != 0) {
+    while (i < sharedMemory->maxAlertKeyInfo && strcmp(sharedMemory->alertKeyInfoArray[i].id, id) != 0) {
         i++;
     }
 
@@ -273,7 +303,9 @@ int remove_alert_key(SharedMemory *sharedMemory, char *key) {
     }
 
     // Remove alert key
+    strcpy(sharedMemory->alertKeyInfoArray[i].id, "");
     strcpy(sharedMemory->alertKeyInfoArray[i].key, "");
+    sharedMemory->alertKeyInfoArray[i].console_id = 0;
     sharedMemory->alertKeyInfoArray[i].min = 0;
     sharedMemory->alertKeyInfoArray[i].max = 0;
 

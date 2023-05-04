@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <poll.h>
 
 // Functions
 void create_named_pipes();
