@@ -25,6 +25,7 @@ pthread_t dispatcher;
 
 // Queue
 Queue *intqueue;
+int msgid; // Message queue id
 
 // Pipes
 int **pipes_fd;
@@ -49,7 +50,8 @@ void handle_signint(int sig) {
     pthread_cancel(sensor_reader);
     pthread_cancel(dispatcher);
 
-    printf("Preparing to exit...\n");
+    sprintf(log_buffer, "PREPARING TO SHUTDOWN...\n");
+    log_writer(log_buffer);
 
     // Closing and freeing unnamed pipes
     for (int i = 0; i < config_vals.nr_workers; i++) {
@@ -70,8 +72,14 @@ void handle_signint(int sig) {
     // Freeing and detaching shm
     remove_shm(shm);
     remove_worker_queue(worker_shm);
+
+    // Freeing queue
+    if (msgctl(msgid, IPC_RMID, NULL) == -1) {
+        perror("msgctl");
+        exit(EXIT_FAILURE);
+    }
     
-    sprintf(log_buffer, "EXITING, CODE %d\n", sig);
+    sprintf(log_buffer, "HOME_IOT SHUTTING DOWN [SIG CODE %d]\n", sig);
     log_writer(log_buffer);
 
     pthread_mutex_destroy(&log_mutex);
@@ -169,7 +177,7 @@ void main_initializer() {
 
     // Creating message queue
     key_t key = ftok(".", 'a');
-    int msgid = msgget(key, IPC_CREAT | 0666);
+    msgid = msgget(key, IPC_CREAT | 0666);
 
     // Creating unnamed pipes for workers
     pipes_fd = malloc(config_vals.nr_workers * sizeof(int *));
@@ -197,6 +205,7 @@ void main_initializer() {
 // Main function
 int main(int argc, char *argv[]) {
     signal(SIGINT, handle_signint);
+    signal(SIGTSTP, handle_signint);
     // Verifies if the config file path was passed as a parameter
     if (argc != 2) {
         sprintf(log_buffer, "INVALID CONFIG ARGUMENT ON START. EXITING\n");

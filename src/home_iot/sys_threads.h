@@ -8,6 +8,9 @@
 #include <unistd.h>
 #include <poll.h>
 
+// Define
+#define READ_PIPE 128
+
 // Functions
 void create_named_pipes();
 int create_threads();

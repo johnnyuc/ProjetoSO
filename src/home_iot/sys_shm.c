@@ -268,10 +268,25 @@ int insert_alert_key(SharedMemory *sharedMemory, int console_id, char *id, char 
         i++;
     }
 
+    // Check if key is not present in Sensor array
+    int j = 0;
+    while (j < sharedMemory->sensorCount) {
+        if (strcmp(sharedMemory->sensorArray[j].key, key) == 0) {
+            break;
+        }
+        j++;
+    }
+
+    // If it's no present, quits
+    if (j == sharedMemory->sensorCount) {
+        pthread_mutex_unlock(&sharedMemory->mutex);
+        return 2;
+    }
+
     // Check if it's full
     if (i == sharedMemory->maxAlertKeyInfo) {
         pthread_mutex_unlock(&sharedMemory->mutex);
-        return 2;
+        return 3;
     }
 
     // Insert new alert key

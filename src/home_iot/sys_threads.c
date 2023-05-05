@@ -69,7 +69,8 @@ int create_threads() {
 // Main thread functions
 void *console_reader_function() {
     char llog_buffer[BUFFER_MESSAGE];
-    char buffer[BUFFER_MESSAGE];
+    char enqueuing[BUFFER_MESSAGE];
+    char buffer[READ_PIPE];
     
     // Open console pipe
     int console_fd = open("CONSOLE_PIPE", O_RDONLY | O_NONBLOCK);
@@ -88,13 +89,15 @@ void *console_reader_function() {
     while (1) {
         int poll_result = poll(&pfd, 1, -1); // Blocking poll
         if (poll_result > 0 && (pfd.revents & POLLIN)) {
-            ssize_t bytes_read = read(console_fd, buffer, BUFFER_MESSAGE);
+            ssize_t bytes_read = read(console_fd, buffer, READ_PIPE);
             if (bytes_read > 0) {
                 // Write to queue
-                enqueue(intqueue, buffer);
-                printf("CONSOLE READER: %s\n", buffer);
+                strcpy(enqueuing, "CONSOLE#"); // Add console prefix
+                strcat(enqueuing, buffer);
+                enqueue(intqueue, enqueuing);
+                //printf("CONSOLE READER: %s\n", enqueuing);
             }
-            memset(buffer, 0, BUFFER_MESSAGE);
+            memset(buffer, 0, READ_PIPE);
         } else if (poll_result > 0 && (pfd.revents & POLLHUP)) {
             // Reopen the pipe if it was closed
             close(console_fd);
@@ -114,7 +117,8 @@ void *console_reader_function() {
 
 void *sensor_reader_function() {
     char llog_buffer[BUFFER_MESSAGE];
-    char buffer[BUFFER_MESSAGE];
+    char enqueuing[BUFFER_MESSAGE];
+    char buffer[READ_PIPE];
 
     // Open sensor pipe
     int sensor_fd = open("SENSOR_PIPE", O_RDONLY | O_NONBLOCK);
@@ -133,13 +137,15 @@ void *sensor_reader_function() {
     while (1) {
         int poll_result = poll(&pfd, 1, -1); // Blocking poll
         if (poll_result > 0 && (pfd.revents & POLLIN)) {
-            ssize_t bytes_read = read(sensor_fd, buffer, BUFFER_MESSAGE);
+            ssize_t bytes_read = read(sensor_fd, buffer, READ_PIPE);
             if (bytes_read > 0) {
                 // Write to queue
-                enqueue(intqueue, buffer);
-                //printf("SENSOR READER: %s\n", buffer);
+                strcpy(enqueuing, "SENSOR#"); // Add sensor prefix
+                strcat(enqueuing, buffer);
+                enqueue(intqueue, enqueuing);
+                //printf("CONSOLE READER: %s\n", enqueuing);
             }
-            memset(buffer, 0, BUFFER_MESSAGE);
+            memset(buffer, 0, READ_PIPE);
         } else if (poll_result > 0 && (pfd.revents & POLLHUP)) {
             // Reopen the pipe if it was closed
             close(sensor_fd);
@@ -158,8 +164,7 @@ void *sensor_reader_function() {
 
 
 void *dispatcher_function() {
-    //char llog_buffer[BUFFER_MESSAGE];
-
+    
     // Dispatcher function
     while (1) {
         // Takes one message from queue
@@ -173,8 +178,6 @@ void *dispatcher_function() {
         
         // Write to worker pipe
         write(pipes_fd[worker_task][1], buffer, BUFFER_MESSAGE);
-
-        //print_worker_queue(worker_shm);
     }
 
     return NULL;

@@ -73,13 +73,15 @@ int watcher_tasks(SharedMemory *shm, int msgid) {
                                 flood_buffer[j].timestamp = time(NULL);
 
                                 // Send alert message through message queue
-                                sprintf(msg.msg_text, "ALERT ID \"%s\" WITH KEY \"%s\" GOT %.2f DEGREES (RANGE: %.2f - %.2f)", 
+                                sprintf(msg.msg_text, "ALERT ID [%s] WITH KEY [%s] GOT %.2f DEGREES [RANGE: %.2f - %.2f]", 
                                     shm->alertKeyInfoArray[i].id, shm->alertKeyInfoArray[i].key, shm->sensorKeyInfoArray[i].averageValue,
                                     shm->alertKeyInfoArray[i].min, shm->alertKeyInfoArray[i].max);
                                 msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                                sprintf(msg.msg_text, "END");
+                                msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
 
                                 // Log alert message
-                                sprintf(llog_buffer, "ALERT ID \"%s\" WITH KEY \"%s\" GOT %.2f DEGREES (RANGE: %.2f - %.2f)\n", 
+                                sprintf(llog_buffer, "ALERT ID [%s] WITH KEY [%s] GOT %.2f DEGREES [RANGE: %.2f - %.2f]\n", 
                                     shm->alertKeyInfoArray[i].id, shm->alertKeyInfoArray[i].key, shm->sensorKeyInfoArray[i].averageValue, 
                                     shm->alertKeyInfoArray[i].min, shm->alertKeyInfoArray[i].max);
                                 log_writer(llog_buffer);
@@ -98,13 +100,15 @@ int watcher_tasks(SharedMemory *shm, int msgid) {
                             flood_index = (flood_index + 1) % FLOOD_LIMIT;
 
                             // Send alert message through message queue
-                            sprintf(msg.msg_text, "ALERT ID \"%s\" WITH KEY \"%s\" GOT %.2f DEGREES (RANGE: %.2f - %.2f)", 
+                            sprintf(msg.msg_text, "ALERT ID [%s] WITH KEY [%s] GOT %.2f DEGREES [RANGE: %.2f - %.2f]", 
                                 shm->alertKeyInfoArray[i].id, shm->alertKeyInfoArray[i].key, shm->sensorKeyInfoArray[i].averageValue,
                                 shm->alertKeyInfoArray[i].min, shm->alertKeyInfoArray[i].max);
                             msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                            sprintf(msg.msg_text, "END");
+                            msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
 
                             // Log alert message
-                            sprintf(llog_buffer, "ALERT ID \"%s\" WITH KEY \"%s\" GOT %.2f DEGREES (RANGE: %.2f - %.2f)\n", 
+                            sprintf(llog_buffer, "ALERT ID [%s] WITH KEY [%s] GOT %.2f DEGREES [RANGE: %.2f - %.2f]\n", 
                                 shm->alertKeyInfoArray[i].id, shm->alertKeyInfoArray[i].key, shm->sensorKeyInfoArray[i].averageValue, 
                                 shm->alertKeyInfoArray[i].min, shm->alertKeyInfoArray[i].max);
                             log_writer(llog_buffer);

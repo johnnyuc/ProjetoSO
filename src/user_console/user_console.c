@@ -92,24 +92,24 @@ char *command_validation(char *command) {
 
     // Validate the command and its arguments
     // 0: command, 1: id, 2: key, 3: min_value, 4: max_value
-    if (strcmp(argv[0], "exit") == 0 && argc == 1) {
-        return strcpy(command, "exit");
-    } else if (strcmp(argv[0], "stats") == 0 && argc == 1) {
+    if (strcmp(argv[0], "EXIT") == 0 && argc == 1) {
+        return strcpy(command, "EXIT");
+    } else if (strcmp(argv[0], "STATS") == 0 && argc == 1) {
         return pipe_format(command, argv, argc);
-    } else if (strcmp(argv[0], "reset") == 0 && argc == 1) {
+    } else if (strcmp(argv[0], "RESET") == 0 && argc == 1) {
         return pipe_format(command, argv, argc);
-    } else if (strcmp(argv[0], "sensors") == 0 && argc == 1) {
+    } else if (strcmp(argv[0], "SENSORS") == 0 && argc == 1) {
         return pipe_format(command, argv, argc);
-    } else if (strcmp(argv[0], "add_alert") == 0 && argc == 5) {
+    } else if (strcmp(argv[0], "ADD_ALERT") == 0 && argc == 5) {
         // Check if id is alphanumeric
         if (alnum_validation(argv[1], 0) && alnum_validation(argv[2], 0) && 
         alnum_validation(argv[3], 1) && alnum_validation(argv[4], 1))
             return pipe_format(command, argv, argc);
-    } else if (strcmp(argv[0], "remove_alert") == 0 && argc == 2) {
+    } else if (strcmp(argv[0], "REMOVE_ALERT") == 0 && argc == 2) {
         // Check if id is alphanumeric
         if (alnum_validation(argv[1], 0))
             return pipe_format(command, argv, argc);
-    } else if (strcmp(argv[0], "list_alerts") == 0 && argc == 1) {
+    } else if (strcmp(argv[0], "LIST_ALERTS") == 0 && argc == 1) {
         return pipe_format(command, argv, argc);
     }
 
@@ -127,18 +127,18 @@ void *writer_function() {
     }
     
     // Announce connection to server
-    printf("PIPE OPENED, FD: %d\n", console_fd);
-    printf("CONSOLE %d CONNECTED TO SERVER\n\n", console_id);
+    printf("PIPE [%d] OPENED\n", console_fd);
+    printf("CONSOLE [%d] CONNECTED TO SERVER\n\n", console_id);
     
     // Print menu
-    printf("Menu options:\n");
-    printf("* exit\n");
-    printf("* stats\n");
-    printf("* sensors\n");
-    printf("* reset\n");
-    printf("* list_alerts\n");
-    printf("* add_alert [id] [key] [min] [max]\n");
-    printf("* remove_alert [id]\n\n");
+    printf("MENU OPTIONS:\n");
+    printf("* EXIT\n");
+    printf("* STATS\n");
+    printf("* SENSORS\n");
+    printf("* RESET\n");
+    printf("* LIST_ALERTS\n");
+    printf("* ADD_ALERT [ID] [KEY] [MIN] [MAX]\n");
+    printf("* REMOVE_ALERT [ID]\n\n");
 
     // Send messages to pipe
     while (1) {
@@ -146,12 +146,17 @@ void *writer_function() {
         char command[BUFFER_MESSAGE];
         printf("> ");
         fgets(command, BUFFER_MESSAGE, stdin);
+        
+        // Ignore casing
+        for (int i = 0; command[i] != '\0'; i++) {
+            command[i] = toupper(command[i]);
+        }
 
         // Validate and format or exit
         if (command_validation(command) == NULL) {
             printf("INCORRECT COMMAND: %s\n", command);
             continue;
-        } else if (strcmp(command, "exit") == 0){
+        } else if (strcmp(command, "EXIT") == 0){
             handle_sigint(0);
             break;
         }
@@ -178,7 +183,14 @@ void *reader_function() {
 
     while (1) {
         msgrcv(msgid, &msg, sizeof(msg), console_id, 0);
-        printf("%s\n", msg.msg_text);
+        if (strcmp(msg.msg_text, "END") == 0) {
+            printf("> ");
+            fflush(stdout);
+        } else if (strcmp(msg.msg_text, "OK") == 0 || strcmp(msg.msg_text, "ERROR") == 0) {
+            printf("%s\n", msg.msg_text);
+            printf("> ");
+            fflush(stdout);
+        } else printf("%s\n", msg.msg_text);
     }
     
     return NULL;

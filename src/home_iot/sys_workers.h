@@ -8,7 +8,7 @@
 #include "sys_shm.h" // Used for SharedMemory
 
 // Defines
-#define MAX_TOKENS 6
+#define MAX_TOKENS 10
 
 // Functions
 void create_unnamed_pipes(int **pipes_fd, int nr_workers);

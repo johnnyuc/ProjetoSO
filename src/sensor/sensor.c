@@ -34,9 +34,7 @@ int alnum_validation(const char *str, int underscore) {
 }
 
 char *pipe_format(char *msg, SensorArgs args, int value) {
-    // Prepend IDs
-    //int pos = sprintf(msg, "SENSOR#%d#", getpid());
-    int pos = sprintf(msg, "SENSOR#");
+    int pos = 0;
 
     // Convert sensor_id and key to uppercase
     for (int i = 0; args.sensor_id[i]; i++) {
@@ -66,7 +64,7 @@ void sensor_run(SensorArgs args) {
         // Format the message
         pipe_format(msg, args, value);
         // Logging
-        printf("SENDING: %s#%s#%d\n", args.sensor_id, args.key, value);
+        printf("SENDING: %s\n", msg);
         // Write to pipe
         int write_code = write(sensor_fd, msg, strlen(msg));
         if (write_code < 0) {

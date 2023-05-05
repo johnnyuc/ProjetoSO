@@ -45,17 +45,52 @@ char *dequeue(Queue *queue) {
         pthread_cond_wait(&queue->cond_empty, &queue->mutex);
     }
 
-    char *data = queue->head->data;
+    char *data = NULL;
     QueueNode *node = queue->head;
-    queue->head = queue->head->next;
-    queue->size--;
 
-    if (queue->size == 0) {
-        queue->tail = NULL;
+    // Find the first node that does not start with "SENSOR"
+    while (node != NULL) {
+        if (strncmp(node->data, "SENSOR", strlen("SENSOR")) != 0) {
+            data = node->data;
+            break;
+        }
+        node = node->next;
     }
-    
-    free(node);
-    pthread_cond_signal(&queue->cond_full);
+
+    // If no node was found, dequeue the first node that starts with "SENSOR"
+    if (data == NULL) {
+        node = queue->head;
+        while (node != NULL) {
+            if (strncmp(node->data, "SENSOR", strlen("SENSOR")) == 0) {
+                data = node->data;
+                break;
+            }
+            node = node->next;
+        }
+    }
+
+    // If a node was found, dequeue it
+    if (data != NULL) {
+        if (queue->head == node) {
+            queue->head = node->next;
+            if (queue->head == NULL) {
+                queue->tail = NULL;
+            }
+        } else {
+            QueueNode *prev = queue->head;
+            while (prev->next != node) {
+                prev = prev->next;
+            }
+            prev->next = node->next;
+            if (prev->next == NULL) {
+                queue->tail = prev;
+            }
+        }
+        queue->size--;
+        free(node);
+        pthread_cond_signal(&queue->cond_full);
+    }
+
     pthread_mutex_unlock(&queue->mutex);
     return data;
 }
