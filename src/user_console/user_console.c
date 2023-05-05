@@ -1,16 +1,33 @@
 #include "user_console.h"
 
 // Global variables for the console_id and the pipe file descriptor
+// Console elements
 int console_id;
 int console_fd;
+
+// Threads
+pthread_t reader_thread;
+pthread_t writer_thread;
+
+// Message queue
 int msgid;
 
 // Function to handle the SIGINT signal
-void handle_sigint(int sig) {
-    // Check if pthread_cancel is needed
+void handle_sigint() {
+    pthread_cancel(reader_thread);
+    pthread_cancel(writer_thread);
     close(console_fd);
-    printf("EXITING, CODE %d\n", sig);
     exit(EXIT_SUCCESS);
+}
+
+int float_validation(const char* str) {
+    char* end;
+    strtod(str, &end);
+    if (*end == '\0') {
+        return 1;
+    } else {
+        return 0;
+    }
 }
 
 // Function to validate the format console_id
@@ -103,7 +120,7 @@ char *command_validation(char *command) {
     } else if (strcmp(argv[0], "ADD_ALERT") == 0 && argc == 5) {
         // Check if id is alphanumeric
         if (alnum_validation(argv[1], 0) && alnum_validation(argv[2], 0) && 
-        alnum_validation(argv[3], 1) && alnum_validation(argv[4], 1))
+        float_validation(argv[3]) && float_validation(argv[4]))
             return pipe_format(command, argv, argc);
     } else if (strcmp(argv[0], "REMOVE_ALERT") == 0 && argc == 2) {
         // Check if id is alphanumeric
@@ -182,7 +199,11 @@ void *reader_function() {
     msgqueue msg;
 
     while (1) {
-        msgrcv(msgid, &msg, sizeof(msg), console_id, 0);
+        int result = msgrcv(msgid, &msg, sizeof(msg), console_id, 0);
+        if (result < 0) {
+            printf("MESSAGE QUEUE CLOSED. EXITING\n");
+            handle_sigint(0);
+        }
         if (strcmp(msg.msg_text, "END") == 0) {
             printf("> ");
             fflush(stdout);
@@ -213,7 +234,6 @@ void main_initializer(char *argv[]) {
 
     // Create threads for reader and writer and wait for them to finish
     int status;
-    pthread_t reader_thread, writer_thread;
 
     status = pthread_create(&reader_thread, NULL, reader_function, NULL);
     if (status != 0) {

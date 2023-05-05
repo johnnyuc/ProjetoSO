@@ -74,7 +74,8 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
         //log_writer(llog_buffer_extra);
 
         // Split message
-        num_tokens = split_message(llog_buffer, tokens);
+        char *tokenizer = strdup(llog_buffer);
+        num_tokens = split_message(tokenizer, tokens);
         msg.msg_type = strtol(tokens[1], NULL, 10);
 
         // Print all tokens
@@ -149,13 +150,14 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
                     sprintf(llog_buffer, "WORKER %d: SENSOR LIST REQUESTED [CONSOLE %d]\n", selfid, atoi(tokens[1]));
                     log_writer(llog_buffer);
                 } else if (strcmp(tokens[2], "ADD_ALERT") == 0) {
-                    int result = insert_alert_key(shm, atoi(tokens[1]), tokens[3], tokens[4], atoi(tokens[5]), atoi(tokens[6]));
+                    int result = insert_alert_key(shm, atoi(tokens[1]), tokens[3], tokens[4], atof(tokens[5]), atof(tokens[6]));
                     if (result == 0) { // GOOD
                         // Message queue
                         sprintf(msg.msg_text, "OK");
                         msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
                         // Log writer
-                        sprintf(llog_buffer, "WORKER %d: NEW ALERT [%s] ADDED TO LIST [CONSOLE %d]\n", selfid, tokens[3], atoi(tokens[1]));
+                        printf("%s\n", tokens[3]);
+                        sprintf(llog_buffer, "WORKER %d: NEW ALERT [%s] ADDED TO LIST [CONSOLE %d\n]", selfid, tokens[3], atoi(tokens[1]));
                         log_writer(llog_buffer);
                     } else if (result == 1) { // NOT GOOD
                         // Message queue
@@ -164,7 +166,7 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
                         // Log writer
                         sprintf(llog_buffer, "WORKER %d: ALERT [%s] EXISTS [CONSOLE %d]\n", selfid, tokens[3], atoi(tokens[1]));
                         log_writer(llog_buffer);
-                    } else if (result == 2) {
+                    } else if (result == 2) { // NOT GOOD
                         // Message queue
                         sprintf(msg.msg_text, "ERROR");
                         msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
@@ -186,14 +188,14 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
                         sprintf(msg.msg_text, "OK");
                         msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
                         // Log writer
-                        sprintf(llog_buffer, "WORKER %d: ALERT %s REMOVED FROM LIST BY CONSOLE %d\n", selfid, tokens[3], atoi(tokens[1]));
+                        sprintf(llog_buffer, "WORKER %d: ALERT [%s] REMOVED FROM LIST BY [CONSOLE %d]\n", selfid, tokens[3], atoi(tokens[1]));
                         log_writer(llog_buffer);
                     } else if (result == 1) { // NOT GOOD
                         // Message queue
                         sprintf(msg.msg_text, "ERROR");
                         msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
                         // Log writer
-                        sprintf(llog_buffer, "WORKER %d: ALERT %s NOT FOUND INSIDE LIST. LOOKUP BY CONSOLE %d\n", selfid, tokens[3], atoi(tokens[1]));
+                        sprintf(llog_buffer, "WORKER %d: ALERT [%s] NOT FOUND INSIDE LIST [CONSOLE %d]\n", selfid, tokens[3], atoi(tokens[1]));
                         log_writer(llog_buffer);
                     }
                 } else if (strcmp(tokens[2], "LIST_ALERTS") == 0) {
@@ -203,7 +205,7 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
                     // Looking for alerts to send
                     for (int i = 0; i < shm->maxAlertKeyInfo; i++) {
                         if (strcmp(shm->alertKeyInfoArray[i].id, "") != 0) {
-                            sprintf(msg.msg_text, "%s\t\t%s\t\t%0.0f\t%0.0f", 
+                            sprintf(msg.msg_text, "%s\t\t%s\t\t%0.1f\t%0.1f", 
                             shm->alertKeyInfoArray[i].id,
                             shm->alertKeyInfoArray[i].key, 
                             shm->alertKeyInfoArray[i].min, 
@@ -214,7 +216,7 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
                     sprintf(msg.msg_text, "END");
                     msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
                     // Log writer
-                    sprintf(llog_buffer, "WORKER %d: ALERT LIST REQUESTED BY CONSOLE %d\n", selfid, atoi(tokens[1]));
+                    sprintf(llog_buffer, "WORKER %d: ALERT LIST REQUESTED [CONSOLE %d]\n", selfid, atoi(tokens[1]));
                     log_writer(llog_buffer);
                 }
             }
@@ -224,6 +226,7 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
         //print_worker_queue(worker_shm);
 
         // Enables it to receive new tasks
+        free(tokenizer); // Freeing strdup memory
         enqueue_worker(worker_shm, selfid);
     }
 

@@ -5,16 +5,14 @@ int msgs_sent = 0;
 int sensor_fd;
 
 // Function to handle the SIGINT signal
-void handle_sigint(int sig) {
-    printf("SIGINT CODE: %d\n", sig);
+void handle_sigint() {
     printf("PROCESS TERMINATED. SENT MESSAGES: %d\n", msgs_sent);
     close(sensor_fd);
     exit(EXIT_SUCCESS);
 }
 
 // Function to handle the SIGTSTP signal
-void handle_sigtstp(int sig) {
-    printf("SIGTSTP CODE: %d\n", sig);
+void handle_sigtstp() {
     printf("SENT MESSAGES: %d\n", msgs_sent);
 }
 
@@ -69,7 +67,7 @@ void sensor_run(SensorArgs args) {
         int write_code = write(sensor_fd, msg, strlen(msg));
         if (write_code < 0) {
             if (errno == EPIPE) {  // pipe closed by server 
-                printf("PIPE CLOSED. EXITING.\n");
+                printf("PIPE CLOSED. EXITING\n");
                 break;
             } else {
                 printf("ERROR SENDING DATA. EXITING\n");

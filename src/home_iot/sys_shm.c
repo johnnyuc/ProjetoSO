@@ -258,10 +258,10 @@ int insert_alert_key(SharedMemory *sharedMemory, int console_id, char *id, char 
     // Locks mutex
     pthread_mutex_lock(&sharedMemory->mutex);
 
-    // Checks if key already exists
+    // Checks if id already exists
     int i = 0;
-    while (i < sharedMemory->maxAlertKeyInfo && strcmp(sharedMemory->alertKeyInfoArray[i].key, "") != 0) {
-        if (strcmp(sharedMemory->alertKeyInfoArray[i].key, key) == 0) {
+    while (i < sharedMemory->maxAlertKeyInfo && strcmp(sharedMemory->alertKeyInfoArray[i].id, "") != 0) {
+        if (strcmp(sharedMemory->alertKeyInfoArray[i].id, id) == 0) {
             pthread_mutex_unlock(&sharedMemory->mutex);
             return 1;
         }
