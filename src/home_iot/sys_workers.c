@@ -129,6 +129,11 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
                         // Log writer
                         sprintf(llog_buffer, "WORKER %d: STATISTICAL DATA RESET REQUESTED [CONSOLE %d]\n", selfid, atoi(tokens[1]));
                         log_writer(llog_buffer);
+
+                        // Reset flood_buffer
+                        for (int i = 0; i < 8; i++) {
+                            shm->flood_buffer[i][0] = '\0';
+                        }
                     }
                 } else if (strcmp(tokens[2], "SENSORS") == 0) {
                     // Message queue

@@ -37,12 +37,18 @@ int watcher_tasks(SharedMemory *shm, int msgid) {
     flood_prevent flood_buffer[FLOOD_LIMIT];
     int flood_index = 0;
 
+    // Initialize flood buffer
+    for (int i = 0; i < FLOOD_LIMIT; i++) {
+        flood_buffer[i].id[0] = '\0';
+        flood_buffer[i].timestamp = 0;
+    }
+
     // Log writer
     char llog_buffer[BUFFER_MESSAGE];
 
     // Message queue
     msgqueue msg;
-    sprintf(llog_buffer, "WATCHER PROCESS %d ATTACHED TO %d SHM\n", getpid(), shm->shmid);
+    sprintf(llog_buffer, "WATCHER %d ATTACHED TO SHARED MEMORY %d\n", getpid(), shm->shmid);
     log_writer(llog_buffer);
 
     // Wait for alert signal and process
@@ -64,9 +70,10 @@ int watcher_tasks(SharedMemory *shm, int msgid) {
                     msg.msg_type = shm->alertKeyInfoArray[i].console_id;
 
                     // Check if alert key is already in flood buffer
+                    int found = 0;
                     for (int j = 0; j < FLOOD_LIMIT; j++) {
                         if (strcmp(shm->alertKeyInfoArray[i].id, flood_buffer[j].id) == 0) {
-
+                             printf("ID 1: %s ID 2: %s\n", shm->alertKeyInfoArray[i].id, flood_buffer[j].id);
                             // Check if alert key is in flood buffer for more than FLOOD_TIME seconds
                             if (time(NULL) - flood_buffer[j].timestamp >= FLOOD_TIME) {
                                 // Update timestamp
@@ -88,36 +95,43 @@ int watcher_tasks(SharedMemory *shm, int msgid) {
 
                                 // Remove alert key
                                 //remove_alert_key(shm, shm->alertKeyInfoArray[i].key);
+                                found = 1;
                                 break;
                             } else {
                                 // FLOOD_TIME not reached yet
+                                found = 1;
                                 break;
                             }
-                        } else {
-                            // Add alert key to flood buffer
-                            strcpy(flood_buffer[flood_index].id, shm->alertKeyInfoArray[i].id);
-                            flood_buffer[j].timestamp = time(NULL);
-                            flood_index = (flood_index + 1) % FLOOD_LIMIT;
-
-                            // Send alert message through message queue
-                            sprintf(msg.msg_text, "ALERT ID [%s] WITH KEY [%s] GOT %.2f DEGREES [RANGE: %.2f - %.2f]", 
-                                shm->alertKeyInfoArray[i].id, shm->alertKeyInfoArray[i].key, shm->sensorKeyInfoArray[i].averageValue,
-                                shm->alertKeyInfoArray[i].min, shm->alertKeyInfoArray[i].max);
-                            msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
-                            sprintf(msg.msg_text, "END");
-                            msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
-
-                            // Log alert message
-                            sprintf(llog_buffer, "ALERT ID [%s] WITH KEY [%s] GOT %.2f DEGREES [RANGE: %.2f - %.2f]\n", 
-                                shm->alertKeyInfoArray[i].id, shm->alertKeyInfoArray[i].key, shm->sensorKeyInfoArray[i].averageValue, 
-                                shm->alertKeyInfoArray[i].min, shm->alertKeyInfoArray[i].max);
-                            log_writer(llog_buffer);
-
-                            // Remove alert key
-                            //remove_alert_key(shm, shm->alertKeyInfoArray[i].key);
-                            break;
                         }
-                    }  
+                    }
+                    if (!found) {
+                        // Add alert key to flood buffer
+                        strcpy(flood_buffer[flood_index].id, shm->alertKeyInfoArray[i].id);
+                        flood_buffer[flood_index].timestamp = time(NULL);
+                        flood_index = (flood_index + 1) % FLOOD_LIMIT;
+
+                        // Send alert message through message queue
+                        sprintf(msg.msg_text, "ALERT ID [%s] WITH KEY [%s] GOT %.2f DEGREES [RANGE: %.2f - %.2f]", 
+                            shm->alertKeyInfoArray[i].id, shm->alertKeyInfoArray[i].key, shm->sensorKeyInfoArray[i].averageValue,
+                            shm->alertKeyInfoArray[i].min, shm->alertKeyInfoArray[i].max);
+                        msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+                        sprintf(msg.msg_text, "END");
+                        msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
+
+                        // Log alert message
+                        sprintf(llog_buffer, "ALERT ID [%s] WITH KEY [%s] GOT %.2f DEGREES [RANGE: %.2f - %.2f]\n", 
+                            shm->alertKeyInfoArray[i].id, shm->alertKeyInfoArray[i].key, shm->sensorKeyInfoArray[i].averageValue, 
+                            shm->alertKeyInfoArray[i].min, shm->alertKeyInfoArray[i].max);
+                        log_writer(llog_buffer);
+
+                        // Remove alert key
+                        //remove_alert_key(shm, shm->alertKeyInfoArray[i].key);
+                        break;
+                    }
+                    // Print whole flood buffer
+                    //for (int j = 0; j < FLOOD_LIMIT; j++) {
+                    //    printf("FLOOD BUFFER [%d] ID [%s] TIMESTAMP [%ld]\n", j, flood_buffer[j].id, flood_buffer[j].timestamp);
+                    //}
                 }
             }
         }

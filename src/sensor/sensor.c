@@ -67,7 +67,7 @@ void sensor_run(SensorArgs args) {
         int write_code = write(sensor_fd, msg, strlen(msg));
         if (write_code < 0) {
             if (errno == EPIPE) {  // pipe closed by server 
-                printf("PIPE CLOSED. EXITING\n");
+                printf("PIPE CLOSED [HOME_IOT]. EXITING\n");
                 break;
             } else {
                 printf("ERROR SENDING DATA. EXITING\n");

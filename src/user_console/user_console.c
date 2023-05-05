@@ -120,7 +120,8 @@ char *command_validation(char *command) {
     } else if (strcmp(argv[0], "ADD_ALERT") == 0 && argc == 5) {
         // Check if id is alphanumeric
         if (alnum_validation(argv[1], 0) && alnum_validation(argv[2], 0) && 
-        float_validation(argv[3]) && float_validation(argv[4]))
+        float_validation(argv[3]) && float_validation(argv[4]) &&
+        atof(argv[3]) < atof(argv[4]))
             return pipe_format(command, argv, argc);
     } else if (strcmp(argv[0], "REMOVE_ALERT") == 0 && argc == 2) {
         // Check if id is alphanumeric
@@ -201,7 +202,7 @@ void *reader_function() {
     while (1) {
         int result = msgrcv(msgid, &msg, sizeof(msg), console_id, 0);
         if (result < 0) {
-            printf("MESSAGE QUEUE CLOSED. EXITING\n");
+            printf("MESSAGE QUEUE CLOSED [HOME_IOT]. EXITING\n");
             handle_sigint(0);
         }
         if (strcmp(msg.msg_text, "END") == 0) {

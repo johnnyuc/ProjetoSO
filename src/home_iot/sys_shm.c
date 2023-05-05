@@ -163,6 +163,24 @@ int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastV
             found = 1;
             if (strcmp(sharedMemory->sensorArray[sensor].key, key) != 0) {
                 // Sensor already exists but key is different, reject
+                // Insert into flood_buffer if it's not already inside
+                int inserted = 0;
+                for (int i = 0; i < 8; i++) {
+                    if (strcmp(sharedMemory->flood_buffer[i], id) == 0) {
+                        // If it's already inside, set flag and break
+                        inserted = 1;
+                        break;
+                    }
+                }
+                if (!inserted) {
+                    strncpy(sharedMemory->flood_buffer[sharedMemory->flood_buffer_index], id, BUFFER_MESSAGE);
+                    // Update the next available slot index to point to the next position in the buffer
+                    sharedMemory->flood_buffer_index = (sharedMemory->flood_buffer_index + 1) % 8;
+                } else {
+                    // If it's already inside, print flood buffer and return
+                    pthread_mutex_unlock(&sharedMemory->mutex);
+                    return 0;
+                }
                 pthread_mutex_unlock(&sharedMemory->mutex);
                 return 1;
             }
@@ -170,6 +188,7 @@ int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastV
         }
         sensor++;
     }
+
 
     if (found == 0 && sensor == sharedMemory->maxSensors) {
         // Sensor array is full, reject

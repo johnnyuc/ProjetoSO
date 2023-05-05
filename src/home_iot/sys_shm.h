@@ -52,6 +52,9 @@ typedef struct SharedMemory {
     int maxSensors;
     // Shared memory id
     int shmid;
+    // Anti flood
+    char flood_buffer[8][BUFFER_MESSAGE];
+    int flood_buffer_index;
 } SharedMemory;
 
 typedef struct WorkerAvailability {
