@@ -114,7 +114,7 @@ void remove_shm(SharedMemory *sharedMemory) {
     }
 }
 
-void print_shared_memory(SharedMemory *sharedMemory) {
+void print_full_data(SharedMemory *sharedMemory, WorkerSHM *worker_shm) {
     pthread_mutex_lock(&sharedMemory->mutex);
     
     printf("SENSOR KEY INFO:\n");
@@ -145,6 +145,32 @@ void print_shared_memory(SharedMemory *sharedMemory) {
             sharedMemory->sensorArray[i].id,
             sharedMemory->sensorArray[i].key);
     }
+
+    printf("WORKER QUEUE:\n");
+    for(int i = 0; i < worker_shm->size; i++) {
+        // Calculate the index of the current element in the queue
+        int index = (worker_shm->front + i) % worker_shm->nr_workers;
+
+        // Print the worker ID
+        printf("%d ", worker_shm->workerAvailability[index].available);
+    }
+    printf("\n");
+
+    // Print flood buffer
+    printf("WORKER FLOOD BUFFER:\n");
+    for (int i = 0; i < 3; i++) {
+        printf("BLOCKED FLOOD RET%d: %ld SEC ELAPSED\n", i+1, time(NULL)-sharedMemory->flood_buffer[i]);
+    }
+    printf("WORKER SIZE: %d\n", worker_shm->size);
+
+    if (pthread_mutex_trylock(&worker_shm->mutex) == 0) {
+        // Mutex acquired successfully
+        printf("COULD LOCK WORKER SHM MUTEX\n");
+        pthread_mutex_unlock(&worker_shm->mutex);
+    } else {
+        // Mutex is locked by another thread
+        printf("COULD NOT LOCK WORKER SHM MUTEX\n");
+    }
     
     pthread_mutex_unlock(&sharedMemory->mutex);
 }
@@ -163,26 +189,14 @@ int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastV
             found = 1;
             if (strcmp(sharedMemory->sensorArray[sensor].key, key) != 0) {
                 // Sensor already exists but key is different, reject
-                // Insert into flood_buffer if it's not already inside
-                int inserted = 0;
-                for (int i = 0; i < 8; i++) {
-                    if (strcmp(sharedMemory->flood_buffer[i], id) == 0) {
-                        // If it's already inside, set flag and break
-                        inserted = 1;
-                        break;
-                    }
-                }
-                if (!inserted) {
-                    strncpy(sharedMemory->flood_buffer[sharedMemory->flood_buffer_index], id, BUFFER_MESSAGE);
-                    // Update the next available slot index to point to the next position in the buffer
-                    sharedMemory->flood_buffer_index = (sharedMemory->flood_buffer_index + 1) % 8;
+                if (time(NULL) - sharedMemory->flood_buffer[0] >= FLOOD_TIME) {
+                    sharedMemory->flood_buffer[0] = time(NULL);
+                    pthread_mutex_unlock(&sharedMemory->mutex);
+                    return 1;
                 } else {
-                    // If it's already inside, print flood buffer and return
                     pthread_mutex_unlock(&sharedMemory->mutex);
                     return 0;
                 }
-                pthread_mutex_unlock(&sharedMemory->mutex);
-                return 1;
             }
             break;
         }
@@ -192,8 +206,14 @@ int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastV
 
     if (found == 0 && sensor == sharedMemory->maxSensors) {
         // Sensor array is full, reject
-        pthread_mutex_unlock(&sharedMemory->mutex);
-        return 2;
+        if (time(NULL) - sharedMemory->flood_buffer[1] >= FLOOD_TIME) {
+            sharedMemory->flood_buffer[1] = time(NULL);
+            pthread_mutex_unlock(&sharedMemory->mutex);
+            return 2;
+        } else {
+            pthread_mutex_unlock(&sharedMemory->mutex);
+            return 0;
+        }
     }
 
     if (found == 0) {
@@ -230,8 +250,14 @@ int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastV
 
     if (insert == sharedMemory->maxSensorKeyInfo) {
         // Array is full
-        pthread_mutex_unlock(&sharedMemory->mutex);
-        return 3;
+        if (time(NULL) - sharedMemory->flood_buffer[2] >= FLOOD_TIME) {
+            sharedMemory->flood_buffer[2] = time(NULL);
+            pthread_mutex_unlock(&sharedMemory->mutex);
+            return 3;
+        } else {
+            pthread_mutex_unlock(&sharedMemory->mutex);
+            return 0;
+        }
     }
 
     // Insert new sensor key
@@ -455,7 +481,6 @@ void print_worker_queue(WorkerSHM *worker_shm) {
 void enqueue_worker(WorkerSHM *worker_shm, int worker_id) {
     // Acquire the mutex before modifying the shared memory
     pthread_mutex_lock(&worker_shm->mutex);
-
     // Increment the rear index, circularly
     if(worker_shm->size == 0) {
         worker_shm->front = worker_shm->rear = 0;
@@ -467,16 +492,18 @@ void enqueue_worker(WorkerSHM *worker_shm, int worker_id) {
     worker_shm->workerAvailability[worker_shm->rear].available = worker_id;
     worker_shm->size++;
     
+    pthread_mutex_unlock(&worker_shm->mutex);
+
     // Signal the condition variable to wake up any waiting threads
     pthread_cond_signal(&worker_shm->cond);
-    pthread_mutex_unlock(&worker_shm->mutex);
 }
 
 int dequeue_worker(WorkerSHM *worker_shm) {
     // Acquire the mutex before modifying the shared memory
     pthread_mutex_lock(&worker_shm->mutex);
     
-    // Check if the queue is empty
+    // Check if the queue is empty 
+    // Can never be empty
     while (worker_shm->size == 0) {
         pthread_cond_wait(&worker_shm->cond, &worker_shm->mutex);
     }
@@ -485,7 +512,11 @@ int dequeue_worker(WorkerSHM *worker_shm) {
     
     worker_shm->front = (worker_shm->front + 1) % worker_shm->nr_workers;
     worker_shm->size--;
-    pthread_mutex_unlock(&worker_shm->mutex);
     
+    pthread_mutex_unlock(&worker_shm->mutex);
+
+    // Print all items in the queue
+    print_worker_queue(worker_shm);
+
     return worker_id;
 }

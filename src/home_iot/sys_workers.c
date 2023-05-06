@@ -25,6 +25,7 @@ int create_workers(int nr_workers, int shmid, int worker_shmid, int msgid) {
             log_writer(log_buffer);
 
             // Starting worker process
+            signal(SIGTSTP, SIG_IGN); // Ignore SIGTSTP
             close(pipes_fd[i][1]); // Close write end of pipe
             SharedMemory *shm = attach_shm(shmid); // Attach shared memory
             WorkerSHM *worker_shm = attach_worker_queue(worker_shmid);  // Attach worker queue
@@ -68,7 +69,8 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
     while (1) {
         // Read message from pipe
         read(pipe_fd[0], llog_buffer, BUFFER_MESSAGE);
-
+        printf("MESSAGE: %s\n", llog_buffer);
+        
         // Register worker activity
         //sprintf(llog_buffer_extra, "DISPATCHER: %s\n", llog_buffer);
         //log_writer(llog_buffer_extra);
@@ -85,10 +87,10 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
             if (strcmp(tokens[0], "SENSOR") == 0) {
                 int result = insert_sensor_key(shm, tokens[1], tokens[2], atoi(tokens[3]));
                 if (result == 1) {
-                    sprintf(llog_buffer, "WORKER %d: SENSOR [%s] HAS A DUPLICATED ID. DISCARDING\n", selfid, tokens[1]);
+                    sprintf(llog_buffer, "WORKER %d: SENSOR HAS A DUPLICATED ID. DISCARDING\n", selfid);
                     log_writer(llog_buffer);
                 } else if (result == 2) {
-                    sprintf(llog_buffer, "WORKER %d: SENSOR [%s] COULD NOT BE ADDED. FULL LIST\n", selfid, tokens[1]);
+                    sprintf(llog_buffer, "WORKER %d: SENSOR COULD NOT BE ADDED. FULL LIST\n", selfid);
                     log_writer(llog_buffer);
                 } else if (result == 3) {
                     sprintf(llog_buffer, "WORKER %d: SENSOR KEY LIST FULL. DISCARDING DATA\n", selfid);
@@ -129,11 +131,6 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
                         // Log writer
                         sprintf(llog_buffer, "WORKER %d: STATISTICAL DATA RESET REQUESTED [CONSOLE %d]\n", selfid, atoi(tokens[1]));
                         log_writer(llog_buffer);
-
-                        // Reset flood_buffer
-                        for (int i = 0; i < 8; i++) {
-                            shm->flood_buffer[i][0] = '\0';
-                        }
                     }
                 } else if (strcmp(tokens[2], "SENSORS") == 0) {
                     // Message queue

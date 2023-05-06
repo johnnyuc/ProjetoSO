@@ -4,11 +4,16 @@
 
 // System global variables [created in sys_manager.c]
 extern char log_buffer[BUFFER_MESSAGE];
+flood_prevent flood_buffer[FLOOD_LIMIT];
+int flood_index = 0;
 
 // Workers
 int create_watcher(int shmid, int msgid) {
     pid_t pid = fork();
     if (pid == 0) {
+        // Ignore SIGTSTP
+        signal(SIGTSTP, print_buffer);
+        
         // Watcher process
         sprintf(log_buffer, "WATCHER PROCESS %d CREATED\n", getpid());
         log_writer(log_buffer);
@@ -32,11 +37,16 @@ int create_watcher(int shmid, int msgid) {
     return 0;
 }
 
-int watcher_tasks(SharedMemory *shm, int msgid) {
-    // Prevents flooding messages through message queue
-    flood_prevent flood_buffer[FLOOD_LIMIT];
-    int flood_index = 0;
+void print_buffer() {
+    usleep(1000); // Sleep for 1ms to allow priority on print_full_data
+    printf("ALERT FLOOD BUFFER:\n");
+    for (int i = 0; i < FLOOD_LIMIT; i++) {
+        printf("BLOCKED ALERT: %s, TIMESTAMP: %ld\n", flood_buffer[i].id, flood_buffer[i].timestamp);
+    }
+}
 
+int watcher_tasks(SharedMemory *shm, int msgid) {
+    
     // Initialize flood buffer
     for (int i = 0; i < FLOOD_LIMIT; i++) {
         flood_buffer[i].id[0] = '\0';
@@ -73,7 +83,6 @@ int watcher_tasks(SharedMemory *shm, int msgid) {
                     int found = 0;
                     for (int j = 0; j < FLOOD_LIMIT; j++) {
                         if (strcmp(shm->alertKeyInfoArray[i].id, flood_buffer[j].id) == 0) {
-                             printf("ID 1: %s ID 2: %s\n", shm->alertKeyInfoArray[i].id, flood_buffer[j].id);
                             // Check if alert key is in flood buffer for more than FLOOD_TIME seconds
                             if (time(NULL) - flood_buffer[j].timestamp >= FLOOD_TIME) {
                                 // Update timestamp

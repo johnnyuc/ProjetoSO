@@ -12,6 +12,7 @@
 
 // Defines
 #define MAX_LEN 32
+#define FLOOD_TIME 30
 
 // Structs
 typedef struct SensorKeyInfo {
@@ -53,8 +54,7 @@ typedef struct SharedMemory {
     // Shared memory id
     int shmid;
     // Anti flood
-    char flood_buffer[8][BUFFER_MESSAGE];
-    int flood_buffer_index;
+    time_t flood_buffer[3];
 } SharedMemory;
 
 typedef struct WorkerAvailability {
@@ -91,8 +91,7 @@ void remove_worker_queue(WorkerSHM* worker_shm);
 
 // Writes, reads, removes
 // Prints
-void print_shared_memory(SharedMemory* sharedMemory);
-void print_worker_queue(WorkerSHM* worker_shm);
+void print_full_data(SharedMemory *sharedMemory, WorkerSHM *workerSHM);
 
 // Worker queue
 void enqueue_worker(WorkerSHM* worker_shm, int worker_id);

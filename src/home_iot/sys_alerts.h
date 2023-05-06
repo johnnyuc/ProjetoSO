@@ -8,7 +8,7 @@
 #include "sys_shm.h" // Used for SharedMemory
 
 // Defines
-#define FLOOD_LIMIT 32
+#define FLOOD_LIMIT 8
 #define FLOOD_TIME 30
 
 // Structs
@@ -18,6 +18,7 @@ typedef struct flood_prevent {
 } flood_prevent;
 
 // Functions
+void print_buffer();
 int create_watcher(int shmid, int msgid);
 int watcher_tasks(SharedMemory *shm, int msgid);
 

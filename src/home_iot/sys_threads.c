@@ -12,6 +12,8 @@ extern Queue *intqueue;
 extern WorkerSHM *worker_shm;
 extern int **pipes_fd;
 
+#include <errno.h>
+
 // Create named pipes
 void create_named_pipes() {
     char *sensor_pipe = "SENSOR_PIPE";
@@ -169,15 +171,19 @@ void *dispatcher_function() {
     while (1) {
         // Takes one message from queue
         char *buffer = dequeue(intqueue);
+        char *buffer_copy = strdup(buffer);
+
         // Places it into the first avaialble worker pipe
         int worker_task = dequeue_worker(worker_shm);
-
+        
         // Write to log
         //sprintf(llog_buffer, "DISPATCHER SENT %s TO WORKER %d\n", buffer, worker_task);
         //log_writer(llog_buffer);
         
         // Write to worker pipe
-        write(pipes_fd[worker_task][1], buffer, BUFFER_MESSAGE);
+        write(pipes_fd[worker_task][1], buffer_copy, BUFFER_MESSAGE);
+        
+        free(buffer_copy);
     }
 
     return NULL;

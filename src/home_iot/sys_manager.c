@@ -31,6 +31,10 @@ int msgid; // Message queue id
 int **pipes_fd;
 int sensor_fd, console_fd;
 
+void handle_sigtstp() {
+    print_full_data(shm, worker_shm);
+}
+
 // Function to handle the SIGINT signal
 void handle_signint(int sig) {
     // Tricky part:
@@ -61,10 +65,21 @@ void handle_signint(int sig) {
     }
     free(pipes_fd);
 
+    // Store unhandled data to log
+    pthread_mutex_destroy(&intqueue->mutex); // Destroying mutex
+
+    // Grab data from internal queue
+    QueueNode *node = intqueue->head;
+    while (node != NULL) {
+        sprintf(log_buffer, "INTERNAL QUEUE HOLD: %s\n", node->data);
+        log_writer(log_buffer);
+        node = node->next;
+    }
+
     // Closing named pipes
     close(sensor_fd);
     close(console_fd);
-
+    
     // To remove the named pipe from filesystem
     unlink("SENSOR_PIPE");
     unlink("CONSOLE_PIPE");
@@ -205,7 +220,8 @@ void main_initializer() {
 // Main function
 int main(int argc, char *argv[]) {
     signal(SIGINT, handle_signint);
-    signal(SIGTSTP, handle_signint);
+    signal(SIGTSTP, handle_sigtstp);
+    signal(SIGQUIT, SIG_IGN);
     // Verifies if the config file path was passed as a parameter
     if (argc != 2) {
         sprintf(log_buffer, "INVALID CONFIG ARGUMENT ON START. EXITING\n");
