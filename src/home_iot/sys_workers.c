@@ -69,7 +69,6 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
     while (1) {
         // Read message from pipe
         read(pipe_fd[0], llog_buffer, BUFFER_MESSAGE);
-        printf("MESSAGE: %s\n", llog_buffer);
         
         // Register worker activity
         //sprintf(llog_buffer_extra, "DISPATCHER: %s\n", llog_buffer);

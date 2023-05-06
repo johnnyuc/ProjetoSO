@@ -161,16 +161,6 @@ void print_full_data(SharedMemory *sharedMemory, WorkerSHM *worker_shm) {
     for (int i = 0; i < 3; i++) {
         printf("BLOCKED FLOOD RET%d: %ld SEC ELAPSED\n", i+1, time(NULL)-sharedMemory->flood_buffer[i]);
     }
-    printf("WORKER SIZE: %d\n", worker_shm->size);
-
-    if (pthread_mutex_trylock(&worker_shm->mutex) == 0) {
-        // Mutex acquired successfully
-        printf("COULD LOCK WORKER SHM MUTEX\n");
-        pthread_mutex_unlock(&worker_shm->mutex);
-    } else {
-        // Mutex is locked by another thread
-        printf("COULD NOT LOCK WORKER SHM MUTEX\n");
-    }
     
     pthread_mutex_unlock(&sharedMemory->mutex);
 }
@@ -514,9 +504,6 @@ int dequeue_worker(WorkerSHM *worker_shm) {
     worker_shm->size--;
     
     pthread_mutex_unlock(&worker_shm->mutex);
-
-    // Print all items in the queue
-    print_worker_queue(worker_shm);
 
     return worker_id;
 }
