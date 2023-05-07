@@ -39,7 +39,7 @@ void print_buffer() {
     usleep(1000); // Sleep for 1ms to allow priority on print_full_data
     printf("ALERT FLOOD BUFFER:\n");
     for (int i = 0; i < FLOOD_LIMIT; i++) {
-        printf("BLOCKED ALERT: %s, TIMESTAMP: %ld\n", flood_buffer[i].id, flood_buffer[i].timestamp);
+        printf("BLOCKED ALERT %s: %ld SEC ELAPSED\n", flood_buffer[i].id, time(NULL)-flood_buffer[i].timestamp);
     }
 }
 

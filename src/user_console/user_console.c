@@ -254,13 +254,13 @@ void main_initializer(char *argv[]) {
 
     status = pthread_create(&reader_thread, NULL, reader_function, NULL);
     if (status != 0) {
-        perror("ERROR CREATING READER THREAD");
+        printf("ERROR CREATING READER THREAD\n");
         handle_sigint(1);
     }
 
     status = pthread_create(&writer_thread, NULL, writer_function, NULL);
     if (status != 0) {
-        perror("ERROR CREATING WRITER THREAD");
+        printf("ERROR CREATING WRITER THREAD");
         handle_sigint(1);
     }
 
