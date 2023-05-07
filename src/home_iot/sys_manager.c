@@ -14,7 +14,7 @@ ConfigValues config_vals;
 char log_buffer[BUFFER_MESSAGE];
 pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-// Shared memory
+// Shared memory (internal and worker)
 SharedMemory *shm;
 WorkerSHM *worker_shm;
 
@@ -23,11 +23,11 @@ pthread_t console_reader;
 pthread_t sensor_reader;
 pthread_t dispatcher;
 
-// Queue
+// Queue (internal and message)
 Queue *intqueue;
-int msgid; // Message queue id
+int msgid;
 
-// Pipes
+// Pipes (named and unnamed)
 int **pipes_fd;
 int sensor_fd, console_fd;
 
@@ -37,10 +37,6 @@ void handle_sigtstp() {
 
 // Function to handle the SIGINT signal
 void handle_signint(int sig) {
-    // Tricky part:
-    // Careful about cleaning up resources like waiting for all threads to finish
-    // processes to finish, detaching access to shm, free calloc and then exit and write to log
-    
     // Waiting for workers to finish
     for (int i = 0; i < config_vals.nr_workers; i++) {
         wait(NULL);
@@ -54,6 +50,7 @@ void handle_signint(int sig) {
     pthread_cancel(sensor_reader);
     pthread_cancel(dispatcher);
 
+    // Log writer
     sprintf(log_buffer, "PREPARING TO SHUTDOWN...\n");
     log_writer(log_buffer);
 
@@ -66,7 +63,8 @@ void handle_signint(int sig) {
     free(pipes_fd);
 
     // Store unhandled data to log
-    pthread_mutex_destroy(&intqueue->mutex); // Destroying mutex
+    // Destroying mutex
+    pthread_mutex_destroy(&intqueue->mutex);
 
     // Grab data from internal queue
     QueueNode *node = intqueue->head;
@@ -80,7 +78,7 @@ void handle_signint(int sig) {
     close(sensor_fd);
     close(console_fd);
     
-    // To remove the named pipe from filesystem
+    // Remove named pipes
     unlink("SENSOR_PIPE");
     unlink("CONSOLE_PIPE");
 
@@ -90,13 +88,15 @@ void handle_signint(int sig) {
 
     // Freeing queue
     if (msgctl(msgid, IPC_RMID, NULL) == -1) {
-        perror("msgctl");
-        exit(EXIT_FAILURE);
+        sprintf(log_buffer, "COULD NOT REMOVE MESSAGE QUEUE\n", sig);
+        log_writer(log_buffer);
     }
     
+    // Log writer closure
     sprintf(log_buffer, "HOME_IOT SHUTTING DOWN [SIG CODE %d]\n", sig);
     log_writer(log_buffer);
 
+    // Destroying log mutex
     pthread_mutex_destroy(&log_mutex);
     exit(EXIT_SUCCESS);
 }
@@ -110,14 +110,14 @@ ConfigValues config_loader(char* filepath) {
     if (config_file == NULL) {
         sprintf(config, "FAILED TO OPEN CONFIG FILE. EXITING\n");
         log_writer(config);
-        exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE); // No need for resource cleanup
     }
     
     int param_count = 0;
     while (fgets(config, sizeof(config), config_file)) {
-        char* token = strtok(config, " \t\r\n");  // for each line, get the first token
+        char* token = strtok(config, " \t\r\n"); // For each line, get the first token
         if (token == NULL ||  token[0] == '#') {
-            continue;  // skip empty lines and comments
+            continue;  // Skip empty lines and comments
         }
 
         int value = atoi(token);
@@ -142,18 +142,14 @@ ConfigValues config_loader(char* filepath) {
     if (param_count != 5) {
         sprintf(config, "INCORRECT CONFIG FILE PARAMS. EXITING\n");
         log_writer(config);
-        exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE); // No need for resource cleanup
     }
-
     fclose(config_file);
     return values;
 }
 
 // Function to write to log file and to the screen
 void log_writer(char* log_buffer) {
-    // If the mutex is locked, the thread will wait until it is unlocked
-    // Makes sure that only one thread can write to the log file at a time
-    // Also guarantees that the log file will be written to in the correct order
     pthread_mutex_lock(&log_mutex);
 
     // Timestamp format: dd/mm/yy hh:mm:ss
@@ -179,7 +175,7 @@ void log_writer(char* log_buffer) {
 
     // Unlocks the mutex
     pthread_mutex_unlock(&log_mutex);
-    memset(log_buffer, 0, BUFFER_MESSAGE); // clears the message buffer
+    memset(log_buffer, 0, BUFFER_MESSAGE); // Clears the message buffer
 }
 
 // Main function to initialize the system manager
@@ -219,9 +215,11 @@ void main_initializer() {
 
 // Main function
 int main(int argc, char *argv[]) {
+    // Signal handlers
     signal(SIGINT, handle_signint);
     signal(SIGTSTP, handle_sigtstp);
     signal(SIGQUIT, SIG_IGN);
+
     // Verifies if the config file path was passed as a parameter
     if (argc != 2) {
         sprintf(log_buffer, "INVALID CONFIG ARGUMENT ON START. EXITING\n");
@@ -237,12 +235,14 @@ int main(int argc, char *argv[]) {
     }
     fclose(fp);
 
+    // Log writer
     sprintf(log_buffer, "HOME_IOT SIMULATOR STARTING\n");
     log_writer(log_buffer);
     
+    // Loading config file values
     config_vals = config_loader(argv[1]);
+    // Boots up
     main_initializer();
 
-    handle_signint(0);  // Exits
-    return EXIT_SUCCESS;
+    return 0;
 }

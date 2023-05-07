@@ -1,17 +1,25 @@
+/**********************************************
+* Author: Johnny Fernandes 2021190668         *
+* LEI UC 2022-23 - Sistemas Operativos        *
+**********************************************/
+
+// Includes
 #include "sys_manager.h"
 #include "sys_alerts.h"
 #include "sys_shm.h"
 
 // System global variables [created in sys_manager.c]
 extern char log_buffer[BUFFER_MESSAGE];
+
+// Flood buffer
 flood_prevent flood_buffer[FLOOD_LIMIT];
 int flood_index = 0;
 
-// Workers
-int create_watcher(int shmid, int msgid) {
+// Watcher
+void create_watcher(int shmid, int msgid) {
     pid_t pid = fork();
     if (pid == 0) {
-        // Ignore SIGTSTP
+        // Ignore SIGTSTP (DEBUG)
         signal(SIGTSTP, print_buffer);
         
         // Watcher process
@@ -23,20 +31,10 @@ int create_watcher(int shmid, int msgid) {
 
         // Watcher process
         watcher_tasks(shm, msgid);
-
-        // Closing worker process
-        detach_shm(shm); // Detach shared memory
-
-        // Log writer
-        sprintf(log_buffer, "WATCHER PROCESS %d ENDED\n", getpid());
-        log_writer(log_buffer);
-        exit(EXIT_SUCCESS);
     }
-    
-    // Waiting for alert watcher to finish
-    return 0;
 }
 
+// Function to print flood buffer info
 void print_buffer() {
     usleep(1000); // Sleep for 1ms to allow priority on print_full_data
     printf("ALERT FLOOD BUFFER:\n");
@@ -45,9 +43,9 @@ void print_buffer() {
     }
 }
 
-int watcher_tasks(SharedMemory *shm, int msgid) {
-    
-    // Initialize flood buffer
+// Main watcher function
+void watcher_tasks(SharedMemory *shm, int msgid) {
+    // Initializes flood buffer
     for (int i = 0; i < FLOOD_LIMIT; i++) {
         flood_buffer[i].id[0] = '\0';
         flood_buffer[i].timestamp = 0;
@@ -63,9 +61,8 @@ int watcher_tasks(SharedMemory *shm, int msgid) {
 
     // Wait for alert signal and process
     while (1) {
-        // Lock mutex
-        pthread_mutex_lock(&shm->mutex);
         // Wait for alert signal
+        pthread_mutex_lock(&shm->mutex);
         pthread_cond_wait(&shm->alert, &shm->mutex);
 
         // Process alert keys
@@ -101,9 +98,7 @@ int watcher_tasks(SharedMemory *shm, int msgid) {
                                     shm->alertKeyInfoArray[i].id, shm->alertKeyInfoArray[i].key, shm->sensorKeyInfoArray[i].averageValue, 
                                     shm->alertKeyInfoArray[i].min, shm->alertKeyInfoArray[i].max);
                                 log_writer(llog_buffer);
-
-                                // Remove alert key
-                                //remove_alert_key(shm, shm->alertKeyInfoArray[i].key);
+                    
                                 found = 1;
                                 break;
                             } else {
@@ -133,20 +128,11 @@ int watcher_tasks(SharedMemory *shm, int msgid) {
                             shm->alertKeyInfoArray[i].min, shm->alertKeyInfoArray[i].max);
                         log_writer(llog_buffer);
 
-                        // Remove alert key
-                        //remove_alert_key(shm, shm->alertKeyInfoArray[i].key);
                         break;
                     }
-                    // Print whole flood buffer
-                    //for (int j = 0; j < FLOOD_LIMIT; j++) {
-                    //    printf("FLOOD BUFFER [%d] ID [%s] TIMESTAMP [%ld]\n", j, flood_buffer[j].id, flood_buffer[j].timestamp);
-                    //}
                 }
             }
         }
-        // Unlock mutex
         pthread_mutex_unlock(&shm->mutex);
     }
-
-    return 0;
 }

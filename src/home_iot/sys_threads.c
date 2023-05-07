@@ -1,3 +1,9 @@
+/**********************************************
+* Author: Johnny Fernandes 2021190668         *
+* LEI UC 2022-23 - Sistemas Operativos        *
+**********************************************/
+
+// Includes
 #include "sys_manager.h"
 #include "sys_threads.h"
 #include "sys_intqueue.h"
@@ -12,27 +18,27 @@ extern Queue *intqueue;
 extern WorkerSHM *worker_shm;
 extern int **pipes_fd;
 
-#include <errno.h>
-
-// Create named pipes
+// Function to create named pipes
 void create_named_pipes() {
     char *sensor_pipe = "SENSOR_PIPE";
     char *console_pipe = "CONSOLE_PIPE";
 
     // Creating named pipes for sensor and console
     if (mkfifo(sensor_pipe, 0666) == -1) {
-        perror("ERROR CREATING SENSOR PIPE. EXITING");
+        sprintf(log_buffer, "ERROR CREATING SENSOR PIPE. EXITING\n");
+        log_writer(log_buffer);
         exit(EXIT_FAILURE);
     }
 
     if (mkfifo(console_pipe, 0666) == -1) {
-        perror("ERROR CREATING CONSOLE PIPE. EXITING");
+        sprintf(log_buffer, "ERROR CREATING CONSOLE PIPE. EXITING\n");
+        log_writer(log_buffer);
         exit(EXIT_FAILURE);
     }
 }
 
-// Threads
-int create_threads() {
+// Function to create threads
+void create_threads() {
     // Creates console_reader thread
     if (pthread_create(&console_reader, NULL, console_reader_function, NULL) != 0) {
         sprintf(log_buffer, "PTHREAD_CREATE_ERROR IN CONSOLE_READER\n");
@@ -64,11 +70,9 @@ int create_threads() {
     pthread_join(console_reader, NULL);
     pthread_join(sensor_reader, NULL);
     pthread_join(dispatcher, NULL);
-
-    return 0;
 }
 
-// Main thread functions
+// Main console reader function
 void *console_reader_function() {
     char llog_buffer[BUFFER_MESSAGE];
     char enqueuing[BUFFER_MESSAGE];
@@ -97,7 +101,6 @@ void *console_reader_function() {
                 strcpy(enqueuing, "CONSOLE#"); // Add console prefix
                 strcat(enqueuing, buffer);
                 enqueue(intqueue, enqueuing);
-                //printf("CONSOLE READER: %s\n", enqueuing);
             }
             memset(buffer, 0, READ_PIPE);
         } else if (poll_result > 0 && (pfd.revents & POLLHUP)) {
@@ -112,11 +115,10 @@ void *console_reader_function() {
             pfd.fd = console_fd;
         }
     }
-
     return NULL;
 }
 
-
+// Main sensor reader function
 void *sensor_reader_function() {
     char llog_buffer[BUFFER_MESSAGE];
     char enqueuing[BUFFER_MESSAGE];
@@ -145,7 +147,6 @@ void *sensor_reader_function() {
                 strcpy(enqueuing, "SENSOR#"); // Add sensor prefix
                 strcat(enqueuing, buffer);
                 enqueue(intqueue, enqueuing);
-                //printf("CONSOLE READER: %s\n", enqueuing);
             }
             memset(buffer, 0, READ_PIPE);
         } else if (poll_result > 0 && (pfd.revents & POLLHUP)) {
@@ -160,11 +161,10 @@ void *sensor_reader_function() {
             pfd.fd = sensor_fd;
         }
     }
-
     return NULL;
 }
 
-
+// Main dispatcher function
 void *dispatcher_function() {
     
     // Dispatcher function
@@ -176,15 +176,14 @@ void *dispatcher_function() {
         // Places it into the first avaialble worker pipe
         int worker_task = dequeue_worker(worker_shm);
         
-        // Write to log
-        //sprintf(llog_buffer, "DISPATCHER SENT %s TO WORKER %d\n", buffer, worker_task);
-        //log_writer(llog_buffer);
-        
         // Write to worker pipe
-        write(pipes_fd[worker_task][1], buffer_copy, BUFFER_MESSAGE);
-        
+        int result = write(pipes_fd[worker_task][1], buffer_copy, BUFFER_MESSAGE);
+        if (result == -1) {
+            sprintf(log_buffer, "ERROR WRITING TO WORKER PIPE. EXITING\n");
+            log_writer(log_buffer);
+            handle_signint(-1);
+        }
         free(buffer_copy);
     }
-
     return NULL;
 }

@@ -1,9 +1,16 @@
+/**********************************************
+* Author: Johnny Fernandes 2021190668         *
+* LEI UC 2022-23 - Sistemas Operativos        *
+**********************************************/
+
+// Includes
 #include "sys_manager.h"
 #include "sys_intqueue.h"
 
 // System global variables [created in sys_manager.c]
 extern ConfigValues config_vals;
 
+// Function to create internal queue
 Queue *create_queue() {
     Queue *queue = malloc(sizeof(Queue));
     queue->head = NULL;
@@ -15,6 +22,7 @@ Queue *create_queue() {
     return queue;
 }
 
+// Function to enqueue data
 void enqueue(Queue *queue, char *data) {
     QueueNode *node = malloc(sizeof(QueueNode));
     node->data = strdup(data);
@@ -37,17 +45,20 @@ void enqueue(Queue *queue, char *data) {
     pthread_mutex_unlock(&queue->mutex);
 }
 
-
+// Function to dequeue data
 char *dequeue(Queue *queue) {
     pthread_mutex_lock(&queue->mutex);
 
+    // If queue is empty, wait for it to be filled
     while (queue->size == 0) {
         pthread_cond_wait(&queue->cond_empty, &queue->mutex);
     }
 
+    // Searcher
     char *data = NULL;
     QueueNode *node = queue->head;
 
+    // Prioritization of "CONSOLE" over "SENSOR"
     // Find the first node that does not start with "SENSOR"
     while (node != NULL) {
         if (strncmp(node->data, "SENSOR", strlen("SENSOR")) != 0) {
@@ -90,7 +101,6 @@ char *dequeue(Queue *queue) {
         free(node);
         pthread_cond_signal(&queue->cond_full);
     }
-
     pthread_mutex_unlock(&queue->mutex);
     return data;
 }

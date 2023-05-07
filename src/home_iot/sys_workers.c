@@ -1,3 +1,9 @@
+/**********************************************
+* Author: Johnny Fernandes 2021190668         *
+* LEI UC 2022-23 - Sistemas Operativos        *
+**********************************************/
+
+// Includes
 #include "sys_manager.h"
 #include "sys_workers.h"
 #include "sys_shm.h"
@@ -15,38 +21,30 @@ void create_unnamed_pipes(int **pipes_fd, int nr_workers) {
 }
 
 // Workers
-int create_workers(int nr_workers, int shmid, int worker_shmid, int msgid) {
+void create_workers(int nr_workers, int shmid, int worker_shmid, int msgid) {
     pid_t pid;
     for (int i = 0; i < nr_workers; i++) {
         pid = fork();
         if (pid == 0) {
-            // Child process
+            // Ignore SIGTSTP (DEBUG)
+            signal(SIGTSTP, SIG_IGN);
+
+            // Worker process
             sprintf(log_buffer, "WORKER PROCESS %d CREATED\n", getpid());
             log_writer(log_buffer);
 
             // Starting worker process
-            signal(SIGTSTP, SIG_IGN); // Ignore SIGTSTP
             close(pipes_fd[i][1]); // Close write end of pipe
             SharedMemory *shm = attach_shm(shmid); // Attach shared memory
             WorkerSHM *worker_shm = attach_worker_queue(worker_shmid);  // Attach worker queue
 
             // Worker process
             worker_tasks(i, worker_shm, shm, pipes_fd[i], msgid); // Main worker function
-
-            // Closing worker process
-            detach_shm(shm); // Detach shared memory
-            detach_worker_queue(worker_shm); // Detach worker queue
-
-            // Log writer
-            sprintf(log_buffer, "WORKER PROCESS %d ENDED\n", getpid());
-            log_writer(log_buffer);
-            exit(EXIT_SUCCESS);
         } 
     }
-    return 0;
 }
 
-// Message splitter
+// Function to split message into tokens
 int split_message(char *message, char **tokens) {
     int num_tokens = 0;
     char *token = strtok(message, "#");
@@ -59,9 +57,9 @@ int split_message(char *message, char **tokens) {
 }
 
 // Main worker function
-int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe_fd, int msgid) {
+void worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe_fd, int msgid) {
+    // Variables used locally
     char llog_buffer[BUFFER_MESSAGE];
-    //char llog_buffer_extra[BUFFER_MESSAGE+32];
     char *tokens[MAX_TOKENS];
     int num_tokens;
     msgqueue msg;
@@ -69,33 +67,31 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
     while (1) {
         // Read message from pipe
         read(pipe_fd[0], llog_buffer, BUFFER_MESSAGE);
-        
-        // Register worker activity
-        //sprintf(llog_buffer_extra, "DISPATCHER: %s\n", llog_buffer);
-        //log_writer(llog_buffer_extra);
 
         // Split message
         char *tokenizer = strdup(llog_buffer);
         num_tokens = split_message(tokenizer, tokens);
+
+        // Define message type (destination on message queue)
         msg.msg_type = strtol(tokens[1], NULL, 10);
 
-        // Print all tokens
-        //for (int i = 0; i < num_tokens; i++) printf("Token [%d]: %s\n", i, tokens[i]);
-
+        // Processing data
         if (num_tokens > 0) {
             if (strcmp(tokens[0], "SENSOR") == 0) {
                 int result = insert_sensor_key(shm, tokens[1], tokens[2], atoi(tokens[3]));
                 if (result == 1) {
+                    // Log writer
                     sprintf(llog_buffer, "WORKER %d: SENSOR HAS A DUPLICATED ID. DISCARDING\n", selfid);
                     log_writer(llog_buffer);
                 } else if (result == 2) {
+                    // Log writer
                     sprintf(llog_buffer, "WORKER %d: SENSOR COULD NOT BE ADDED. FULL LIST\n", selfid);
                     log_writer(llog_buffer);
                 } else if (result == 3) {
+                    // Log writer
                     sprintf(llog_buffer, "WORKER %d: SENSOR KEY LIST FULL. DISCARDING DATA\n", selfid);
                     log_writer(llog_buffer);
                 }
-                //print_shared_memory(shm);
             } else if (strcmp(tokens[0], "CONSOLE") == 0) {
                 if (strcmp(tokens[2], "STATS") == 0) {
                     // Message queue
@@ -115,9 +111,9 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
                             msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
                         }
                     }
+                    // Message queue
                     sprintf(msg.msg_text, "END");
                     msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
-                    //print_shared_memory(shm);
                     // Log writer
                     sprintf(llog_buffer, "WORKER %d: STATISTICAL DATA REQUESTED [CONSOLE %d]\n", selfid, atoi(tokens[1]));
                     log_writer(llog_buffer);
@@ -145,6 +141,7 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
                             msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
                         }
                     }
+                    // Message queue
                     sprintf(msg.msg_text, "END");
                     msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
                     // Log writer
@@ -206,6 +203,7 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
                     // Looking for alerts to send
                     for (int i = 0; i < shm->maxAlertKeyInfo; i++) {
                         if (strcmp(shm->alertKeyInfoArray[i].id, "") != 0) {
+                            // Message queue
                             sprintf(msg.msg_text, "%s\t\t%s\t\t%0.1f\t%0.1f", 
                             shm->alertKeyInfoArray[i].id,
                             shm->alertKeyInfoArray[i].key, 
@@ -214,6 +212,7 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
                             msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
                         }
                     }
+                    // Message queue
                     sprintf(msg.msg_text, "END");
                     msgsnd(msgid, &msg, sizeof(msg.msg_text), 0);
                     // Log writer
@@ -222,14 +221,9 @@ int worker_tasks(int selfid, WorkerSHM *worker_shm, SharedMemory *shm, int *pipe
                 }
             }
         }
-        // Debug info
-        //print_shared_memory(shm);
-        //print_worker_queue(worker_shm);
 
         // Enables it to receive new tasks
         free(tokenizer); // Freeing strdup memory
         enqueue_worker(worker_shm, selfid);
     }
-
-    return 0;
 }

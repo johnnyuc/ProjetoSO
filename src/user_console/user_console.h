@@ -1,26 +1,30 @@
+/**********************************************
+* Author: Johnny Fernandes 2021190668         *
+* LEI UC 2022-23 - Sistemas Operativos        *
+**********************************************/
+
 #ifndef IOT_PROJECT_USER_CONSOLE_H
 #define IOT_PROJECT_USER_CONSOLE_H
 
 // Includes
-#include <stdio.h> // printf
-#include <stdlib.h> // exit
-#include <string.h> // strlen, strcmp, strcpy, strtok etc
-#include <ctype.h> // isalnum, isdigit, toupper
-#include <signal.h> // signal
-#include <pthread.h> // pthread_create, pthread_cancel
-#include <unistd.h> // open, close, read, write
-#include <fcntl.h> // O_RDONLY O_WRONLY
-#include <errno.h> // errno
-#include <sys/ipc.h> // ftok
-#include <sys/msg.h> // msgget, msgsnd, msgrcv
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <signal.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
 
 // Defines
 #define CONSOLE_PIPE "CONSOLE_PIPE"
 #define BUFFER_MESSAGE 256
-#define MAX_ARGS 5
-#define MIN_LEN 3
 #define MAX_LEN 32
+#define MIN_LEN 3
+#define MAX_ARGS 5
 
 // Structs
 typedef struct msgqueue {

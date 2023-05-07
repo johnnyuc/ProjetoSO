@@ -1,3 +1,8 @@
+/**********************************************
+* Author: Johnny Fernandes 2021190668         *
+* LEI UC 2022-23 - Sistemas Operativos        *
+**********************************************/
+
 #ifndef IOT_PROJECT_SYS_MANAGER_H
 #define IOT_PROJECT_SYS_MANAGER_H
 
@@ -31,9 +36,9 @@ typedef struct msgqueue {
 } msgqueue;
 
 // Functions
-void handle_signint(int sig);
 ConfigValues config_loader(char* filepath);
 void log_writer(char* message);
+void handle_signint(int sig);
 void main_initializer();
 
 #endif //IOT_PROJECT_SYS_MANAGER_H

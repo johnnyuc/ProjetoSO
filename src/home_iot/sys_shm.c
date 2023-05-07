@@ -1,3 +1,9 @@
+/**********************************************
+* Author: Johnny Fernandes 2021190668         *
+* LEI UC 2022-23 - Sistemas Operativos        *
+**********************************************/
+
+// Includes
 #include "sys_manager.h"
 #include "sys_shm.h"
 
@@ -8,10 +14,11 @@ extern char log_buffer[BUFFER_MESSAGE];
 
 // Function to create shared memory
 SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo, int maxSensors) {
-    //size_t shmsize = sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) + (sizeof(AlertKeyInfo) * maxAlertKeyInfo);
+    // Allocate memory for shared memory
     size_t shmsize = sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) + (sizeof(AlertKeyInfo) * maxAlertKeyInfo) + (sizeof(Sensor) * maxSensors);
     int shmid = shmget(IPC_PRIVATE, shmsize, 0666 | IPC_CREAT);
     
+    // Check for errors
     sprintf(log_buffer, "SHARED MEMORY %d CREATED\n", shmid);
     log_writer(log_buffer);
 
@@ -66,6 +73,7 @@ SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo, int maxSenso
     }
     sharedMemory->sensorArray = sensorArray;
 
+    // Log writer
     sprintf(log_buffer, "SHARED MEMORY %d FULLY INITIALIZED\n", shmid);
     log_writer(log_buffer);
 
@@ -104,7 +112,6 @@ void remove_shm(SharedMemory *sharedMemory) {
 
     // Remove shared memory{
     if (shmctl(storedShmid, IPC_RMID, NULL) == -1) {
-        perror("shmctl");
         sprintf(log_buffer, "SHM: ERROR REMOVING SHARED MEMORY\n");
         log_writer(log_buffer);
         exit(EXIT_FAILURE);
@@ -114,64 +121,11 @@ void remove_shm(SharedMemory *sharedMemory) {
     }
 }
 
-void print_full_data(SharedMemory *sharedMemory, WorkerSHM *worker_shm) {
+// Function to insert sensor key info
+void insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastValue) {
     pthread_mutex_lock(&sharedMemory->mutex);
-    
-    printf("SENSOR KEY INFO:\n");
-    for (int i = 0; i < sharedMemory->maxSensorKeyInfo; i++) {
-        //if (strcmp(sharedMemory->sensorKeyInfoArray[i].key, "") == 0) continue;
-        printf("  Key: %s, Last Value: %d, Min: %d, Max: %d, Av.: %.2f, Count: %d\n",
-            sharedMemory->sensorKeyInfoArray[i].key,
-            sharedMemory->sensorKeyInfoArray[i].lastValue,
-            sharedMemory->sensorKeyInfoArray[i].minValue,
-            sharedMemory->sensorKeyInfoArray[i].maxValue,
-            sharedMemory->sensorKeyInfoArray[i].averageValue,
-            sharedMemory->sensorKeyInfoArray[i].updateCount);
-    }
-    
-    printf("ALERT KEY INFO:\n");
-    for (int i = 0; i < sharedMemory->maxAlertKeyInfo; i++) {
-        //if (strcmp(sharedMemory->alertKeyInfoArray[i].key, "") == 0) continue;
-        printf("  Key: %s, Min: %.2f, Max: %.2f\n",
-            sharedMemory->alertKeyInfoArray[i].key,
-            sharedMemory->alertKeyInfoArray[i].min,
-            sharedMemory->alertKeyInfoArray[i].max);
-    }
 
-    printf("SENSORS:\n");
-    for (int i = 0; i < sharedMemory->maxSensors; i++) {
-        //if (strcmp(sharedMemory->sensors[i], "") == 0) continue;
-        printf("  ID: %s, Key: %s\n",
-            sharedMemory->sensorArray[i].id,
-            sharedMemory->sensorArray[i].key);
-    }
-
-    printf("WORKER QUEUE:\n");
-    for(int i = 0; i < worker_shm->size; i++) {
-        // Calculate the index of the current element in the queue
-        int index = (worker_shm->front + i) % worker_shm->nr_workers;
-
-        // Print the worker ID
-        printf("%d ", worker_shm->workerAvailability[index].available);
-    }
-    printf("\n");
-
-    // Print flood buffer
-    printf("WORKER FLOOD BUFFER:\n");
-    for (int i = 0; i < 3; i++) {
-        printf("BLOCKED FLOOD RET%d: %ld SEC ELAPSED\n", i+1, time(NULL)-sharedMemory->flood_buffer[i]);
-    }
-    
-    pthread_mutex_unlock(&sharedMemory->mutex);
-}
-
-// Missing functions to read, write, remove, update and search for sensor and alert key info
-int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastValue) {
-    // Locks mutex
-    pthread_mutex_lock(&sharedMemory->mutex);
-    //printf("INSERTING DATA: %s, %s, %d\n", id, key, lastValue);
-
-    // Verify if sensor exists in sensorArray
+    // Verify if sensor id exists in sensorArray (sensor list)
     int sensor = 0;
     int found = 0;
     while (sensor < sharedMemory->sensorCount) {
@@ -193,9 +147,8 @@ int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastV
         sensor++;
     }
 
-
+    // Verify if sensor array is full
     if (found == 0 && sensor == sharedMemory->maxSensors) {
-        // Sensor array is full, reject
         if (time(NULL) - sharedMemory->flood_buffer[1] >= FLOOD_TIME) {
             sharedMemory->flood_buffer[1] = time(NULL);
             pthread_mutex_unlock(&sharedMemory->mutex);
@@ -206,8 +159,8 @@ int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastV
         }
     }
 
+    // Adding sensor name to sensors array
     if (found == 0) {
-        // Adding sensor name to sensors array
         strcpy(sharedMemory->sensorArray[sharedMemory->sensorCount].key, key);
         strcpy(sharedMemory->sensorArray[sharedMemory->sensorCount].id, id);
         sharedMemory->sensorCount++;
@@ -238,8 +191,8 @@ int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastV
         insert++;
     }
 
+    // Sensor key list is full
     if (insert == sharedMemory->maxSensorKeyInfo) {
-        // Array is full
         if (time(NULL) - sharedMemory->flood_buffer[2] >= FLOOD_TIME) {
             sharedMemory->flood_buffer[2] = time(NULL);
             pthread_mutex_unlock(&sharedMemory->mutex);
@@ -259,15 +212,13 @@ int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastV
     sharedMemory->sensorKeyInfoArray[insert].updateCount++;
 
     pthread_mutex_unlock(&sharedMemory->mutex);
-    return 0;
 }
 
-// Remove a SensorKeyInfo com a chave especificada da estrutura SharedMemory
-int reset_sensor_data(SharedMemory *sharedMemory) {
-    // Locks mutex
+// Function to reset sensor data
+void reset_sensor_data(SharedMemory *sharedMemory) {
     pthread_mutex_lock(&sharedMemory->mutex);
 
-    // Reset sensor key info
+    // Resets sensor key info
     for (int i = 0; i < sharedMemory->maxSensorKeyInfo; i++) {
         sharedMemory->sensorKeyInfoArray[i].key[0] = '\0';
         sharedMemory->sensorKeyInfoArray[i].lastValue = 0;
@@ -277,7 +228,7 @@ int reset_sensor_data(SharedMemory *sharedMemory) {
         sharedMemory->sensorKeyInfoArray[i].updateCount = 0;
     }
 
-    // Reset sensors array
+    // Resets sensors array
     for (int i = 0; i < sharedMemory->sensorCount; i++) {
         sharedMemory->sensorArray[i].key[0] = '\0';
         sharedMemory->sensorArray[i].id[0] = '\0';
@@ -285,12 +236,10 @@ int reset_sensor_data(SharedMemory *sharedMemory) {
     sharedMemory->sensorCount = 0;
 
     pthread_mutex_unlock(&sharedMemory->mutex);
-    return 0;
 }
 
 // Function to insert a new alert key - it doesn't update
 int insert_alert_key(SharedMemory *sharedMemory, int console_id, char *id, char *key, float min, float max) {
-    // Locks mutex
     pthread_mutex_lock(&sharedMemory->mutex);
 
     // Checks if id already exists
@@ -337,7 +286,6 @@ int insert_alert_key(SharedMemory *sharedMemory, int console_id, char *id, char 
 
 // Function to remove an alert key
 int remove_alert_key(SharedMemory *sharedMemory, char *id) {
-    // Locks mutex
     pthread_mutex_lock(&sharedMemory->mutex);
 
     // Checks if key exists
@@ -363,6 +311,7 @@ int remove_alert_key(SharedMemory *sharedMemory, char *id) {
     return 0;
 }
 
+// Function to create worker queue to communicate with dispatcher
 WorkerSHM *create_worker_queue(int nr_workers) {
     // Create the shared memory segment
     size_t shmsize = sizeof(WorkerSHM) + (sizeof(WorkerAvailability) * nr_workers);
@@ -373,6 +322,7 @@ WorkerSHM *create_worker_queue(int nr_workers) {
         exit(EXIT_FAILURE);
     }
 
+    // Log writer
     sprintf(log_buffer, "WORKER SHARED MEMORY %d CREATED\n", shmid);
     log_writer(log_buffer);
 
@@ -426,6 +376,7 @@ WorkerSHM *attach_worker_queue(int shmid) {
     return worker_shm;
 }
 
+// Function to detach shared memory
 void detach_worker_queue(WorkerSHM *worker_shm) {
     if (shmdt(worker_shm) == -1) {
         sprintf(log_buffer, "SHM: ERROR DETACHING SHARED MEMORY %d\n", worker_shm->shmid);
@@ -434,6 +385,7 @@ void detach_worker_queue(WorkerSHM *worker_shm) {
     }
 }
 
+// Function to remove shared memory
 void remove_worker_queue(WorkerSHM *worker_shm) {
     int storedShmid = worker_shm->shmid; // Otherwise unaccessible after detach
 
@@ -452,25 +404,10 @@ void remove_worker_queue(WorkerSHM *worker_shm) {
     }
 }
 
-void print_worker_queue(WorkerSHM *worker_shm) {
-    // Acquire the mutex before accessing the shared memory
-    pthread_mutex_lock(&worker_shm->mutex);
-
-    for(int i = 0; i < worker_shm->size; i++) {
-        // Calculate the index of the current element in the queue
-        int index = (worker_shm->front + i) % worker_shm->nr_workers;
-        
-        // Print the worker ID
-        printf("%d ", worker_shm->workerAvailability[index].available);
-    }
-    printf("\n");
-    
-    pthread_mutex_unlock(&worker_shm->mutex);
-}
-
+// Function to add a worker to the queue
 void enqueue_worker(WorkerSHM *worker_shm, int worker_id) {
-    // Acquire the mutex before modifying the shared memory
     pthread_mutex_lock(&worker_shm->mutex);
+
     // Increment the rear index, circularly
     if(worker_shm->size == 0) {
         worker_shm->front = worker_shm->rear = 0;
@@ -488,22 +425,67 @@ void enqueue_worker(WorkerSHM *worker_shm, int worker_id) {
     pthread_cond_signal(&worker_shm->cond);
 }
 
+// Function to remove a worker from the queue
 int dequeue_worker(WorkerSHM *worker_shm) {
-    // Acquire the mutex before modifying the shared memory
     pthread_mutex_lock(&worker_shm->mutex);
     
-    // Check if the queue is empty 
-    // Can never be empty
+    // Check if the queue is empty
     while (worker_shm->size == 0) {
         pthread_cond_wait(&worker_shm->cond, &worker_shm->mutex);
     }
     
+    // Get the worker ID from the front of the queue
     int worker_id = worker_shm->workerAvailability[worker_shm->front].available;
     
+    // Increment the front index, circularly
     worker_shm->front = (worker_shm->front + 1) % worker_shm->nr_workers;
     worker_shm->size--;
     
     pthread_mutex_unlock(&worker_shm->mutex);
 
     return worker_id;
+}
+
+// Function to print full data on the shared memory
+void print_full_data(SharedMemory *sharedMemory, WorkerSHM *worker_shm) {
+    pthread_mutex_lock(&sharedMemory->mutex);
+    
+    printf("SENSOR KEY INFO:\n");
+    for (int i = 0; i < sharedMemory->maxSensorKeyInfo; i++) {
+        printf("  Key: %s, Last Value: %d, Min: %d, Max: %d, Av.: %.2f, Count: %d\n",
+            sharedMemory->sensorKeyInfoArray[i].key,
+            sharedMemory->sensorKeyInfoArray[i].lastValue,
+            sharedMemory->sensorKeyInfoArray[i].minValue,
+            sharedMemory->sensorKeyInfoArray[i].maxValue,
+            sharedMemory->sensorKeyInfoArray[i].averageValue,
+            sharedMemory->sensorKeyInfoArray[i].updateCount);
+    }
+    
+    printf("ALERT KEY INFO:\n");
+    for (int i = 0; i < sharedMemory->maxAlertKeyInfo; i++) {
+        printf("  Key: %s, Min: %.2f, Max: %.2f\n",
+            sharedMemory->alertKeyInfoArray[i].key,
+            sharedMemory->alertKeyInfoArray[i].min,
+            sharedMemory->alertKeyInfoArray[i].max);
+    }
+
+    printf("SENSORS:\n");
+    for (int i = 0; i < sharedMemory->maxSensors; i++) {
+        printf("  ID: %s, Key: %s\n",
+            sharedMemory->sensorArray[i].id,
+            sharedMemory->sensorArray[i].key);
+    }
+
+    printf("WORKER QUEUE:\n");
+    for(int i = 0; i < worker_shm->size; i++) {
+        int index = (worker_shm->front + i) % worker_shm->nr_workers;
+        printf("%d ", worker_shm->workerAvailability[index].available);
+    }
+    printf("\n");
+
+    printf("WORKER FLOOD BUFFER:\n");
+    for (int i = 0; i < 3; i++) {
+        printf("BLOCKED FLOOD RET%d: %ld SEC ELAPSED\n", i+1, time(NULL)-sharedMemory->flood_buffer[i]);
+    }
+    pthread_mutex_unlock(&sharedMemory->mutex);
 }

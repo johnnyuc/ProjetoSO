@@ -1,3 +1,8 @@
+/**********************************************
+* Author: Johnny Fernandes 2021190668         *
+* LEI UC 2022-23 - Sistemas Operativos        *
+**********************************************/
+
 #ifndef IOT_PROJECT_SHM_H
 #define IOT_PROJECT_SHM_H
 
@@ -90,19 +95,18 @@ void detach_worker_queue(WorkerSHM* worker_shm);
 void remove_worker_queue(WorkerSHM* worker_shm);
 
 // Writes, reads, removes
-// Prints
-void print_full_data(SharedMemory *sharedMemory, WorkerSHM *workerSHM);
-
 // Worker queue
 void enqueue_worker(WorkerSHM* worker_shm, int worker_id);
 int dequeue_worker(WorkerSHM* worker_shm);
 
 // Sensor keys
-int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastValue);
-int reset_sensor_data(SharedMemory* sharedMemory);
+void insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastValue);
+void reset_sensor_data(SharedMemory* sharedMemory);
 
 // Alert keys
 int insert_alert_key(SharedMemory* sharedMemory, int console_id, char* id, char* key, float min, float max);
 int remove_alert_key(SharedMemory* sharedMemory, char* key);
 
+// Prints
+void print_full_data(SharedMemory *sharedMemory, WorkerSHM *workerSHM);
 #endif //IOT_PROJECT_SHM_H

@@ -1,6 +1,13 @@
+/**********************************************
+* Author: Johnny Fernandes 2021190668         *
+* LEI UC 2022-23 - Sistemas Operativos        *
+**********************************************/
+
+// Includes
 #include "user_console.h"
 
-// Global variables for the console_id and the pipe file descriptor
+// Global variables
+
 // Console elements
 int console_id;
 int console_fd;
@@ -14,15 +21,18 @@ int msgid;
 
 // Function to handle the SIGINT signal
 void handle_sigint() {
+    // Resource cleanup
+    msgctl(msgid, IPC_RMID, NULL);
     pthread_cancel(reader_thread);
     pthread_cancel(writer_thread);
     close(console_fd);
     exit(EXIT_SUCCESS);
 }
 
+// Function to verify if the string is a valid float
 int float_validation(const char* str) {
     char* end;
-    strtod(str, &end);
+    strtod(str, &end); // Convert the string to a double
     if (*end == '\0') {
         return 1;
     } else {
@@ -88,7 +98,6 @@ char *pipe_format(char *result, char argv[MAX_ARGS][MAX_LEN], int argc) {
 }
 
 // Function to validate the command and its arguments
-// TODO: add more validation, including casing
 char *command_validation(char *command) {
     char argv[MAX_ARGS][MAX_LEN];
     int argc = 0;
@@ -136,12 +145,14 @@ char *command_validation(char *command) {
     return NULL;
 }
 
+// Function to write messages to the pipe
 void *writer_function() {
-    // Open pipe
+
+    // Opens named pipe for writing only
     console_fd = open(CONSOLE_PIPE, O_WRONLY);
     if (console_fd < 0) {
-        printf("ERROR ACCESSING PIPE\n");
-        exit(EXIT_FAILURE);
+        printf("PIPE CLOSED [START HOME_IOT]. EXITING\n");
+        handle_sigint(1);
     }
     
     // Announce connection to server
@@ -165,12 +176,12 @@ void *writer_function() {
         printf("> ");
         fgets(command, BUFFER_MESSAGE, stdin);
         
-        // Ignore casing
+        // Ignore letter casing
         for (int i = 0; command[i] != '\0'; i++) {
             command[i] = toupper(command[i]);
         }
 
-        // Validate and format or exit
+        // Validate and format or exits
         if (command_validation(command) == NULL) {
             printf("INCORRECT COMMAND: %s\n", command);
             continue;
@@ -179,32 +190,38 @@ void *writer_function() {
             break;
         }
 
-        // Send command to pipe
+        // Send command to the pipe
         int write_code = write(console_fd, command, strlen(command));
         if (write_code < 0) {
             if (errno == EPIPE) {  // pipe closed by server 
-                printf("PIPE CLOSED. EXITING.\n");
-                break;
+                printf("PIPE CLOSED [START HOME_IOT]. EXITING\n");
+                handle_sigint(-1);
             } else {
                 printf("ERROR SENDING DATA. EXITING\n");
-                break;
+                handle_sigint(-1);
             }
         }
-        memset(command, 0, sizeof(command));
+        memset(command, 0, sizeof(command)); // clears buffer
     }
-    return NULL;
+    return NULL; // never reached
 }
 
+// Function to read messages from the pipe
 void *reader_function() {
     // Message queue
     msgqueue msg;
 
     while (1) {
+        // Reads message from message queue
         int result = msgrcv(msgid, &msg, sizeof(msg), console_id, 0);
+
+        // Check if message queue is closed
         if (result < 0) {
             printf("MESSAGE QUEUE CLOSED [HOME_IOT]. EXITING\n");
-            handle_sigint(0);
+            handle_sigint(-1);
         }
+
+        // Message formatting for presentation
         if (strcmp(msg.msg_text, "END") == 0) {
             printf("> ");
             fflush(stdout);
@@ -214,15 +231,14 @@ void *reader_function() {
             fflush(stdout);
         } else printf("%s\n", msg.msg_text);
     }
-    
-    return NULL;
+    return NULL; // never reached
 }
 
 void main_initializer(char *argv[]) {
     // Check if the console_id is valid
     if (!alnum_validation(argv[1], 1)) {
         printf("CONSOLE_ID SHOULD ONLY CONTAIN NUMERIC CHARACTERS\n");
-        exit(EXIT_FAILURE);
+        handle_sigint(1);
     } else {
         console_id = atoi(argv[1]);
     }
@@ -230,7 +246,7 @@ void main_initializer(char *argv[]) {
     // Check if the console_id is valid
     if (console_id < 1) {
         printf("CONSOLE ID SHOULD BE OVER 0\n");
-        exit(EXIT_FAILURE);
+        handle_sigint(1);
     }
 
     // Create threads for reader and writer and wait for them to finish
@@ -239,13 +255,13 @@ void main_initializer(char *argv[]) {
     status = pthread_create(&reader_thread, NULL, reader_function, NULL);
     if (status != 0) {
         perror("ERROR CREATING READER THREAD");
-        exit(EXIT_FAILURE);
+        handle_sigint(1);
     }
 
     status = pthread_create(&writer_thread, NULL, writer_function, NULL);
     if (status != 0) {
         perror("ERROR CREATING WRITER THREAD");
-        exit(EXIT_FAILURE);
+        handle_sigint(1);
     }
 
     // Wait for threads to finish - should never happen, SIGINT will kill them
@@ -253,11 +269,13 @@ void main_initializer(char *argv[]) {
     pthread_join(writer_thread, NULL);
 }
 
+
+// Main function
 int main(int argc, char *argv[]) {
     // Verify if the number of arguments is correct
     if (argc != 2) {
         printf("SYNTAX: %s {CONSOLE_ID}\n", argv[0]);
-        exit(EXIT_FAILURE);
+        handle_sigint(1);
     }
 
     // Configure signal handlers

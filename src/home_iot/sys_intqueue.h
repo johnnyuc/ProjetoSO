@@ -1,6 +1,12 @@
+/**********************************************
+* Author: Johnny Fernandes 2021190668         *
+* LEI UC 2022-23 - Sistemas Operativos        *
+**********************************************/
+
 #ifndef IOT_PROJECT_INTQUEUE_H
 #define IOT_PROJECT_INTQUEUE_H
 
+// Includes
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

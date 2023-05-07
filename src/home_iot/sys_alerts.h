@@ -1,11 +1,16 @@
+/**********************************************
+* Author: Johnny Fernandes 2021190668         *
+* LEI UC 2022-23 - Sistemas Operativos        *
+**********************************************/
+
 #ifndef IOT_PROJECT_ALERTS_WATCHER_H
 #define IOT_PROJECT_ALERTS_WATCHER_H
 
 // Includes
-#include <stdlib.h> // Used for NULL
-#include <unistd.h> // Used for fork
-#include <sys/wait.h> // Used for wait
-#include "sys_shm.h" // Used for SharedMemory
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include "sys_shm.h" // Needed for SharedMemory struct
 
 // Defines
 #define FLOOD_LIMIT 8
@@ -19,7 +24,7 @@ typedef struct flood_prevent {
 
 // Functions
 void print_buffer();
-int create_watcher(int shmid, int msgid);
-int watcher_tasks(SharedMemory *shm, int msgid);
+void create_watcher(int shmid, int msgid);
+void watcher_tasks(SharedMemory *shm, int msgid);
 
 #endif //IOT_PROJECT_ALERTS_WATCHER_H

@@ -1,13 +1,16 @@
+# Author: Johnny Fernandes 2021190668
+# LEI UC 2022-23 - Sistemas Operativos
+
 # Compiler:
 CC = gcc
 
 # Compiler flags:
-CFLAGS = -Wall -Werror -Wextra -pedantic -I. # Making sure either is flawless or breaks
+CFLAGS = -Wall -Werror -Wextra -pedantic -I. # Making sure it's either flawless or breaks
 LDFLAGS = -pthread
 
 # Source folders:
 SRCDIR = src
-LOGDIR = log
+LOGDIR = logs
 
 # HOME_IOT files:
 HOME_IOT_SRCS = $(wildcard $(SRCDIR)/home_iot/*.c)
@@ -28,7 +31,7 @@ USER_CONSOLE_TARGET = bin/user_console
 all: $(HOME_IOT_TARGET) $(SENSOR_TARGET) $(USER_CONSOLE_TARGET)
 
 # Linking the object files
-# May or may not use LDFLAGS, depending on SENSOR and CONSOLE implementation
+# LDFLAGS for pthread library compilation, only used on home_iot and user_console
 $(HOME_IOT_TARGET): $(HOME_IOT_OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(HOME_IOT_OBJS) -o $(HOME_IOT_TARGET)
 
@@ -42,6 +45,6 @@ $(USER_CONSOLE_TARGET): $(USER_CONSOLE_OBJS)
 %.o: %.c %.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Cleaning the project including log files
+# Cleaning the project including log files and pipes
 clean:
 	rm -f $(HOME_IOT_OBJS) $(HOME_IOT_TARGET) $(SENSOR_OBJS) $(SENSOR_TARGET) $(USER_CONSOLE_OBJS) $(USER_CONSOLE_TARGET) $(LOGDIR)/*.log *_PIPE
