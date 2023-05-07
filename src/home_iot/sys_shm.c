@@ -122,7 +122,7 @@ void remove_shm(SharedMemory *sharedMemory) {
 }
 
 // Function to insert sensor key info
-void insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastValue) {
+int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastValue) {
     pthread_mutex_lock(&sharedMemory->mutex);
 
     // Verify if sensor id exists in sensorArray (sensor list)
@@ -212,10 +212,11 @@ void insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int last
     sharedMemory->sensorKeyInfoArray[insert].updateCount++;
 
     pthread_mutex_unlock(&sharedMemory->mutex);
+    return 0;
 }
 
 // Function to reset sensor data
-void reset_sensor_data(SharedMemory *sharedMemory) {
+int reset_sensor_data(SharedMemory *sharedMemory) {
     pthread_mutex_lock(&sharedMemory->mutex);
 
     // Resets sensor key info
@@ -236,6 +237,7 @@ void reset_sensor_data(SharedMemory *sharedMemory) {
     sharedMemory->sensorCount = 0;
 
     pthread_mutex_unlock(&sharedMemory->mutex);
+    return 0;
 }
 
 // Function to insert a new alert key - it doesn't update

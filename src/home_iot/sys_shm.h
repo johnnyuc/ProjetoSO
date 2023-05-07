@@ -100,8 +100,8 @@ void enqueue_worker(WorkerSHM* worker_shm, int worker_id);
 int dequeue_worker(WorkerSHM* worker_shm);
 
 // Sensor keys
-void insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastValue);
-void reset_sensor_data(SharedMemory* sharedMemory);
+int insert_sensor_key(SharedMemory* sharedMemory, char* id, char* key, int lastValue);
+int reset_sensor_data(SharedMemory* sharedMemory);
 
 // Alert keys
 int insert_alert_key(SharedMemory* sharedMemory, int console_id, char* id, char* key, float min, float max);

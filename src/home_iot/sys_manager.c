@@ -88,7 +88,7 @@ void handle_signint(int sig) {
 
     // Freeing queue
     if (msgctl(msgid, IPC_RMID, NULL) == -1) {
-        sprintf(log_buffer, "COULD NOT REMOVE MESSAGE QUEUE\n", sig);
+        sprintf(log_buffer, "COULD NOT REMOVE MESSAGE QUEUE\n");
         log_writer(log_buffer);
     }
     
