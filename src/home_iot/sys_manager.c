@@ -202,30 +202,51 @@ void log_writer(char* log_buffer) {
 void main_initializer() {
     // Creating shared memory
     shm = create_shm(config_vals.max_shmkeys, config_vals.max_alerts, config_vals.max_sensors);
+    sprintf(log_buffer, "SHARED MEMORY %d SUCCESSFULLY CREATED\n", shm->shmid);
+    log_writer(log_buffer);
 
     // Creating internal queue
     intqueue = create_queue(config_vals.queue_size);
+    sprintf(log_buffer, "INTERNAL QUEUE SUCCESSFULLY CREATED\n");
+    log_writer(log_buffer);
 
     // Creating message queue
     key_t key = ftok(".", 'a');
     msgid = msgget(key, IPC_CREAT | 0666);
+    if (msgid == -1) {
+        sprintf(log_buffer, "COULD NOT CREATE MESSAGE QUEUE\n");
+        log_writer(log_buffer);
+        exit(EXIT_FAILURE);
+    } else {
+        sprintf(log_buffer, "MESSAGE QUEUE %d SUCCESSFULLY CREATED\n", msgid);
+        log_writer(log_buffer);
+    }
 
     // Creating unnamed pipes for workers
     pipes_fd = malloc(config_vals.nr_workers * sizeof(int *));
     create_unnamed_pipes(pipes_fd, config_vals.nr_workers);
+    sprintf(log_buffer, "UNNAMED PIPES SUCCESSFULLY CREATED\n");
+    log_writer(log_buffer);
 
     // Creating named pipes for sensor and console
     create_named_pipes();
+    sprintf(log_buffer, "NAMED PIPES SUCCESSFULLY CREATED\n");
+    log_writer(log_buffer);
 
     // Opening named pipes
     sensor_fd = open("SENSOR_PIPE", O_RDONLY | O_NONBLOCK);
     console_fd = open("CONSOLE_PIPE", O_RDONLY | O_NONBLOCK);
+    sprintf(log_buffer, "NAMED PIPES SUCCESSFULLY OPENED\n");
+    log_writer(log_buffer);
 
     // Creating workers and it's own shared memory
     worker_shm = create_worker_queue(config_vals.nr_workers);
     worker_shm = attach_worker_queue(worker_shm->shmid);
+    sprintf(log_buffer, "WORKER SHARED MEMORY %d SUCCESSFULLY CREATED\n", worker_shm->shmid);
+    log_writer(log_buffer);
+
     create_workers(config_vals.nr_workers, shm->shmid, worker_shm->shmid, msgid);
-    
+
     // Creating watcher
     create_watcher(shm->shmid, msgid);
 

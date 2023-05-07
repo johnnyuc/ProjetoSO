@@ -17,10 +17,6 @@ SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo, int maxSenso
     // Allocate memory for shared memory
     size_t shmsize = sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) + (sizeof(AlertKeyInfo) * maxAlertKeyInfo) + (sizeof(Sensor) * maxSensors);
     int shmid = shmget(IPC_PRIVATE, shmsize, 0666 | IPC_CREAT);
-    
-    // Check for errors
-    sprintf(log_buffer, "SHARED MEMORY %d CREATED\n", shmid);
-    log_writer(log_buffer);
 
     // Object to be shared
     SharedMemory *sharedMemory = (SharedMemory *) shmat(shmid, NULL, 0);
@@ -323,10 +319,6 @@ WorkerSHM *create_worker_queue(int nr_workers) {
         log_writer(log_buffer);
         exit(EXIT_FAILURE);
     }
-
-    // Log writer
-    sprintf(log_buffer, "WORKER SHARED MEMORY %d CREATED\n", shmid);
-    log_writer(log_buffer);
 
     // Attach the shared memory segment
     WorkerSHM *worker_shm = (WorkerSHM *) shmat(shmid, NULL, 0);
