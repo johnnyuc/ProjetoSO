@@ -7,6 +7,8 @@
 #include "sys_shm.h"
 
 // Global variables
+pid_t parent;
+
 // Loading
 ConfigValues config_vals;
 
@@ -37,14 +39,20 @@ void handle_sigtstp() {
 
 // Function to handle the SIGINT signal
 void handle_signint(int sig) {
-    // Waiting for workers to finish
-    for (int i = 0; i < config_vals.nr_workers; i++) {
+    // Only for childs to execute
+    if (getpid() != parent) {
+        // Waiting for workers to finish
+        for (int i = 0; i < config_vals.nr_workers; i++) {
+            wait(NULL);
+        }
+
+        // Wait for Watcher
         wait(NULL);
+
+        exit(EXIT_SUCCESS);
     }
 
-    // Wait for Watcher
-    wait(NULL);
-
+    
     // Gracefully exiting threads
     pthread_cancel(console_reader);
     pthread_cancel(sensor_reader);
@@ -52,6 +60,8 @@ void handle_signint(int sig) {
 
     // Log writer
     sprintf(log_buffer, "PREPARING TO SHUTDOWN...\n");
+    log_writer(log_buffer);
+    sprintf(log_buffer, "WORKERS, WATCHER AND READERS+DISPATCHER FINISHED\n");
     log_writer(log_buffer);
 
     // Closing and freeing unnamed pipes
@@ -61,6 +71,18 @@ void handle_signint(int sig) {
         free(pipes_fd[i]);
     }
     free(pipes_fd);
+
+    // Closing named pipes
+    close(sensor_fd);
+    close(console_fd);
+
+    // Remove named pipes
+    unlink("SENSOR_PIPE");
+    unlink("CONSOLE_PIPE");
+
+    // Log writer
+    sprintf(log_buffer, "PIPES SUCCESSFULLY REMOVED\n");
+    log_writer(log_buffer);
 
     // Store unhandled data to log
     // Destroying mutex
@@ -73,22 +95,21 @@ void handle_signint(int sig) {
         log_writer(log_buffer);
         node = node->next;
     }
-
-    // Closing named pipes
-    close(sensor_fd);
-    close(console_fd);
     
-    // Remove named pipes
-    unlink("SENSOR_PIPE");
-    unlink("CONSOLE_PIPE");
-
     // Freeing and detaching shm
     remove_shm(shm);
     remove_worker_queue(worker_shm);
 
+    // Log writer
+    sprintf(log_buffer, "SHARED MEMORY AND WORKER QUEUE SUCCESSFULLY REMOVED\n");
+    log_writer(log_buffer);
+
     // Freeing queue
     if (msgctl(msgid, IPC_RMID, NULL) == -1) {
         sprintf(log_buffer, "COULD NOT REMOVE MESSAGE QUEUE\n");
+        log_writer(log_buffer);
+    } else {
+        sprintf(log_buffer, "MESSAGE QUEUE SUCCESSFULLY REMOVED\n");
         log_writer(log_buffer);
     }
     
@@ -215,6 +236,8 @@ void main_initializer() {
 
 // Main function
 int main(int argc, char *argv[]) {
+    parent = getpid();
+
     // Signal handlers
     signal(SIGINT, handle_signint);
     signal(SIGTSTP, handle_sigtstp);
