@@ -52,7 +52,6 @@ void handle_signint(int sig) {
         exit(EXIT_SUCCESS);
     }
 
-    
     // Gracefully exiting threads
     pthread_cancel(console_reader);
     pthread_cancel(sensor_reader);
