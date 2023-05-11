@@ -22,7 +22,6 @@ int msgid;
 // Function to handle the SIGINT signal
 void handle_sigint() {
     // Resource cleanup
-    msgctl(msgid, IPC_RMID, NULL);
     pthread_cancel(reader_thread);
     pthread_cancel(writer_thread);
     close(console_fd);
@@ -238,7 +237,7 @@ void main_initializer(char *argv[]) {
     // Check if the console_id is valid
     if (!alnum_validation(argv[1], 1)) {
         printf("CONSOLE_ID SHOULD ONLY CONTAIN NUMERIC CHARACTERS\n");
-        handle_sigint(1);
+        exit(EXIT_FAILURE);
     } else {
         console_id = atoi(argv[1]);
     }
@@ -246,7 +245,7 @@ void main_initializer(char *argv[]) {
     // Check if the console_id is valid
     if (console_id < 1) {
         printf("CONSOLE ID SHOULD BE OVER 0\n");
-        handle_sigint(1);
+        exit(EXIT_FAILURE);
     }
 
     // Create threads for reader and writer and wait for them to finish
@@ -255,13 +254,13 @@ void main_initializer(char *argv[]) {
     status = pthread_create(&reader_thread, NULL, reader_function, NULL);
     if (status != 0) {
         printf("ERROR CREATING READER THREAD\n");
-        handle_sigint(1);
+        exit(EXIT_FAILURE);
     }
 
     status = pthread_create(&writer_thread, NULL, writer_function, NULL);
     if (status != 0) {
         printf("ERROR CREATING WRITER THREAD");
-        handle_sigint(1);
+        exit(EXIT_FAILURE);
     }
 
     // Wait for threads to finish - should never happen, SIGINT will kill them
