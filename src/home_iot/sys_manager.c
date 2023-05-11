@@ -84,9 +84,6 @@ void handle_signint(int sig) {
     log_writer(log_buffer);
 
     // Store unhandled data to log
-    // Destroying mutex
-    pthread_mutex_destroy(&intqueue->mutex);
-
     // Grab data from internal queue
     QueueNode *node = intqueue->head;
     while (node != NULL) {
@@ -94,6 +91,11 @@ void handle_signint(int sig) {
         log_writer(log_buffer);
         node = node->next;
     }
+    remove_queue(intqueue);
+
+    // Log writer
+    sprintf(log_buffer, "INTERNAL QUEUE SUCCESSFULLY REMOVED\n");
+    log_writer(log_buffer);
     
     // Freeing and detaching shm
     remove_shm(shm);
@@ -231,12 +233,6 @@ void main_initializer() {
     // Creating named pipes for sensor and console
     create_named_pipes();
     sprintf(log_buffer, "NAMED PIPES SUCCESSFULLY CREATED\n");
-    log_writer(log_buffer);
-
-    // Opening named pipes
-    sensor_fd = open("SENSOR_PIPE", O_RDONLY | O_NONBLOCK);
-    console_fd = open("CONSOLE_PIPE", O_RDONLY | O_NONBLOCK);
-    sprintf(log_buffer, "NAMED PIPES SUCCESSFULLY OPENED\n");
     log_writer(log_buffer);
 
     // Creating workers and it's own shared memory

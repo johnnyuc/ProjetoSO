@@ -28,6 +28,7 @@ typedef struct Queue {
 
 // Functions
 Queue *create_queue();
+void remove_queue(Queue *queue);
 void enqueue(Queue *queue, char *data);
 char *dequeue(Queue *queue);
 

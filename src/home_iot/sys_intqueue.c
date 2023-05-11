@@ -22,6 +22,13 @@ Queue *create_queue() {
     return queue;
 }
 
+void remove_queue(Queue *queue) {
+    pthread_mutex_destroy(&queue->mutex);
+    pthread_cond_destroy(&queue->cond_full);
+    pthread_cond_destroy(&queue->cond_empty);
+    free(queue);
+}
+
 // Function to enqueue data
 void enqueue(Queue *queue, char *data) {
     QueueNode *node = malloc(sizeof(QueueNode));
