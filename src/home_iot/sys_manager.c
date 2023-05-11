@@ -1,3 +1,8 @@
+/**********************************************
+* Author: Johnny Fernandes 2021190668         *
+* LEI UC 2022-23 - Sistemas Operativos        *
+**********************************************/
+
 // Includes
 #include "sys_manager.h"
 #include "sys_intqueue.h"
@@ -237,7 +242,6 @@ void main_initializer() {
 
     // Creating workers and it's own shared memory
     worker_shm = create_worker_queue(config_vals.nr_workers);
-    worker_shm = attach_worker_queue(worker_shm->shmid);
     sprintf(log_buffer, "WORKER SHARED MEMORY %d SUCCESSFULLY CREATED\n", worker_shm->shmid);
     log_writer(log_buffer);
 
