@@ -21,29 +21,42 @@ ConfigValues config_vals;
 char log_buffer[BUFFER_MESSAGE];
 pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-// Shared memory (internal and worker)
-SharedMemory *shm;
-WorkerSHM *worker_shm;
-
 // Threads
 pthread_t console_reader;
 pthread_t sensor_reader;
 pthread_t dispatcher;
 
+// Shared memory (internal and worker)
+SharedMemory *shm = NULL;
+WorkerSHM *worker_shm = NULL;
+
 // Queue (internal and message)
-Queue *intqueue;
-int msgid;
+Queue *intqueue = NULL;
+int msgid = -1;
 
 // Pipes (named and unnamed)
-int **pipes_fd;
+int **pipes_fd = NULL;
 int sensor_fd, console_fd;
 
+// Signals
+volatile sig_atomic_t sigint = 0;
+
+// Function to handle the SIGTSTP signal
 void handle_sigtstp() {
     print_full_data(shm, worker_shm);
 }
 
 // Function to handle the SIGINT signal
 void handle_signint(int sig) {
+    // Signaling threads
+    sigint = 1;
+
+    // Releases dispatcher and readers from waiting (threads)
+    if (intqueue != NULL) {
+        pthread_cond_broadcast(&intqueue->cond_empty);
+        pthread_cond_broadcast(&intqueue->cond_full);
+    }
+
     // Only for childs to execute
     if (getpid() != parent) {
         // Waiting for workers to finish
@@ -57,24 +70,22 @@ void handle_signint(int sig) {
         exit(EXIT_SUCCESS);
     }
 
-    // Gracefully exiting threads
-    pthread_cancel(console_reader);
-    pthread_cancel(sensor_reader);
-    pthread_cancel(dispatcher);
-
     // Log writer
+    printf("\n");
     sprintf(log_buffer, "PREPARING TO SHUTDOWN...\n");
     log_writer(log_buffer);
     sprintf(log_buffer, "WORKERS, WATCHER AND READERS+DISPATCHER FINISHED\n");
     log_writer(log_buffer);
 
     // Closing and freeing unnamed pipes
-    for (int i = 0; i < config_vals.nr_workers; i++) {
-        close(pipes_fd[i][0]);
-        close(pipes_fd[i][1]);
-        free(pipes_fd[i]);
+    if (pipes_fd != NULL) {
+        for (int i = 0; i < config_vals.nr_workers; i++) {
+            close(pipes_fd[i][0]);
+            close(pipes_fd[i][1]);
+            free(pipes_fd[i]);
+        }
+        free(pipes_fd);
     }
-    free(pipes_fd);
 
     // Closing named pipes
     close(sensor_fd);
@@ -90,35 +101,39 @@ void handle_signint(int sig) {
 
     // Store unhandled data to log
     // Grab data from internal queue
-    QueueNode *node = intqueue->head;
-    while (node != NULL) {
-        sprintf(log_buffer, "INTERNAL QUEUE HOLD: %s\n", node->data);
-        log_writer(log_buffer);
-        QueueNode *temp = node;
-        node = node->next;
-        free(temp);
+    if (intqueue != NULL) {
+        QueueNode *node = intqueue->head;
+        while (node != NULL) {
+            sprintf(log_buffer, "INTERNAL QUEUE HOLD: %s\n", node->data);
+            log_writer(log_buffer);
+            QueueNode *temp = node;
+            node = node->next;
+            free(temp);
+        }
+        remove_queue(intqueue);
     }
-    remove_queue(intqueue);
 
     // Log writer
     sprintf(log_buffer, "INTERNAL QUEUE SUCCESSFULLY REMOVED\n");
     log_writer(log_buffer);
     
     // Freeing and detaching shm
-    remove_shm(shm);
-    remove_worker_queue(worker_shm);
+    if (shm != NULL && shm != (void *) -1) remove_shm(shm);
+    if (worker_shm != NULL && worker_shm != (void *) -1) remove_worker_queue(worker_shm);
 
     // Log writer
     sprintf(log_buffer, "SHARED MEMORY AND WORKER QUEUE SUCCESSFULLY REMOVED\n");
     log_writer(log_buffer);
 
     // Freeing queue
-    if (msgctl(msgid, IPC_RMID, NULL) == -1) {
-        sprintf(log_buffer, "COULD NOT REMOVE MESSAGE QUEUE\n");
-        log_writer(log_buffer);
-    } else {
-        sprintf(log_buffer, "MESSAGE QUEUE SUCCESSFULLY REMOVED\n");
-        log_writer(log_buffer);
+    if (msgid != -1) {
+        if (msgctl(msgid, IPC_RMID, NULL) == -1) {
+            sprintf(log_buffer, "COULD NOT REMOVE MESSAGE QUEUE\n");
+            log_writer(log_buffer);
+        } else {
+            sprintf(log_buffer, "MESSAGE QUEUE SUCCESSFULLY REMOVED\n");
+            log_writer(log_buffer);
+        }
     }
     
     // Log writer closure
@@ -208,10 +223,15 @@ void log_writer(char* log_buffer) {
 }
 
 // Main function to initialize the system manager
-void main_initializer() {
+void main_initializer() { // Crash safe
     // Creating shared memory
     shm = create_shm(config_vals.max_shmkeys, config_vals.max_alerts, config_vals.max_sensors);
     sprintf(log_buffer, "SHARED MEMORY %d SUCCESSFULLY CREATED\n", shm->shmid);
+    log_writer(log_buffer);
+
+    // Creating workers and it's own shared memory
+    worker_shm = create_worker_queue(config_vals.nr_workers);
+    sprintf(log_buffer, "WORKER SHARED MEMORY %d SUCCESSFULLY CREATED\n", worker_shm->shmid);
     log_writer(log_buffer);
 
     // Creating internal queue
@@ -225,7 +245,7 @@ void main_initializer() {
     if (msgid == -1) {
         sprintf(log_buffer, "COULD NOT CREATE MESSAGE QUEUE\n");
         log_writer(log_buffer);
-        exit(EXIT_FAILURE);
+        raise(SIGINT);
     } else {
         sprintf(log_buffer, "MESSAGE QUEUE %d SUCCESSFULLY CREATED\n", msgid);
         log_writer(log_buffer);
@@ -242,17 +262,9 @@ void main_initializer() {
     sprintf(log_buffer, "NAMED PIPES SUCCESSFULLY CREATED\n");
     log_writer(log_buffer);
 
-    // Creating workers and it's own shared memory
-    worker_shm = create_worker_queue(config_vals.nr_workers);
-    sprintf(log_buffer, "WORKER SHARED MEMORY %d SUCCESSFULLY CREATED\n", worker_shm->shmid);
-    log_writer(log_buffer);
-
+    // Creating processes and threads
     create_workers(config_vals.nr_workers, shm->shmid, worker_shm->shmid, msgid);
-
-    // Creating watcher
     create_watcher(shm->shmid, msgid);
-
-    // Creating threads
     create_threads();
 }
 

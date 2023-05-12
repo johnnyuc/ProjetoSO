@@ -17,6 +17,7 @@ extern pthread_t dispatcher;
 extern Queue *intqueue;
 extern WorkerSHM *worker_shm;
 extern int **pipes_fd;
+extern volatile sig_atomic_t sigint;
 
 // Function to create named pipes
 void create_named_pipes() {
@@ -27,13 +28,13 @@ void create_named_pipes() {
     if (mkfifo(sensor_pipe, 0666) == -1) {
         sprintf(log_buffer, "ERROR CREATING SENSOR PIPE. EXITING\n");
         log_writer(log_buffer);
-        exit(EXIT_FAILURE);
+        raise(SIGINT);
     }
 
     if (mkfifo(console_pipe, 0666) == -1) {
         sprintf(log_buffer, "ERROR CREATING CONSOLE PIPE. EXITING\n");
         log_writer(log_buffer);
-        exit(EXIT_FAILURE);
+        raise(SIGINT);
     }
 }
 
@@ -83,7 +84,7 @@ void *console_reader_function() {
     if (console_fd == -1) {
         sprintf(llog_buffer, "ERROR OPENING CONSOLE PIPE. EXITING\n");
         log_writer(llog_buffer);
-        exit(EXIT_FAILURE);
+        raise(SIGINT);
     }
 
     // Polling
@@ -92,8 +93,8 @@ void *console_reader_function() {
     pfd.events = POLLIN;
     
     // Console reader function
-    while (1) {
-        int poll_result = poll(&pfd, 1, -1); // Blocking poll
+    while (!sigint) {
+        int poll_result = poll(&pfd, 1, 1000); // Blocking poll
         if (poll_result > 0 && (pfd.revents & POLLIN)) {
             ssize_t bytes_read = read(console_fd, buffer, READ_PIPE);
             if (bytes_read > 0) {
@@ -110,7 +111,7 @@ void *console_reader_function() {
             if (console_fd == -1) {
                 sprintf(llog_buffer, "ERROR OPENING SENSOR PIPE. EXITING\n");
                 log_writer(llog_buffer);
-                exit(EXIT_FAILURE);
+                raise(SIGINT);
             }
             pfd.fd = console_fd;
         }
@@ -129,7 +130,7 @@ void *sensor_reader_function() {
         if (sensor_fd == -1) {
             sprintf(llog_buffer, "ERROR OPENING SENSOR PIPE. EXITING\n");
             log_writer(llog_buffer);
-            exit(EXIT_FAILURE);
+            raise(SIGINT);
         }
 
     // Polling
@@ -138,8 +139,8 @@ void *sensor_reader_function() {
     pfd.events = POLLIN;
     
     // Sensor reader function
-    while (1) {
-        int poll_result = poll(&pfd, 1, -1); // Blocking poll
+    while (!sigint) {
+        int poll_result = poll(&pfd, 1, 1000); // Blocking poll
         if (poll_result > 0 && (pfd.revents & POLLIN)) {
             ssize_t bytes_read = read(sensor_fd, buffer, READ_PIPE);
             if (bytes_read > 0) {
@@ -156,7 +157,7 @@ void *sensor_reader_function() {
             if (sensor_fd == -1) {
                 sprintf(llog_buffer, "ERROR OPENING SENSOR PIPE. EXITING\n");
                 log_writer(llog_buffer);
-                exit(EXIT_FAILURE);
+                raise(SIGINT);
             }
             pfd.fd = sensor_fd;
         }
@@ -168,14 +169,17 @@ void *sensor_reader_function() {
 void *dispatcher_function() {
     
     // Dispatcher function
-    while (1) {
+    while (!sigint) {
         // Takes one message from queue
         char *buffer = dequeue(intqueue);
+        if (sigint) break;
+
         char *buffer_copy = strdup(buffer);
 
         // Places it into the first avaialble worker pipe
         int worker_task = dequeue_worker(worker_shm);
-        
+        if (sigint) break;
+
         // Write to worker pipe
         int result = write(pipes_fd[worker_task][1], buffer_copy, BUFFER_MESSAGE);
         if (result == -1) {

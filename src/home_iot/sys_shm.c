@@ -7,19 +7,28 @@
 #include "sys_manager.h"
 #include "sys_shm.h"
 
-#include <errno.h>
-
 // System global variables [created in sys_manager.c]
 extern char log_buffer[BUFFER_MESSAGE];
+extern volatile sig_atomic_t sigint;
 
 // Function to create shared memory
 SharedMemory* create_shm(int maxSensorKeyInfo, int maxAlertKeyInfo, int maxSensors) {
     // Allocate memory for shared memory
     size_t shmsize = sizeof(SharedMemory) + (sizeof(SensorKeyInfo) * maxSensorKeyInfo) + (sizeof(AlertKeyInfo) * maxAlertKeyInfo) + (sizeof(Sensor) * maxSensors);
     int shmid = shmget(IPC_PRIVATE, shmsize, 0666 | IPC_CREAT);
+    if (shmid == -1) {
+        sprintf(log_buffer, "SHM: ERROR CREATING SHARED MEMORY\n");
+        log_writer(log_buffer);
+        raise(SIGINT);
+    }
 
     // Object to be shared
     SharedMemory *sharedMemory = (SharedMemory *) shmat(shmid, NULL, 0);
+    if (sharedMemory == (void *) -1) {
+        sprintf(log_buffer, "SHM: ERROR ATTACHING SHARED MEMORY\n");
+        log_writer(log_buffer);
+        raise(SIGINT);
+    }
 
     // Initialize shared memory
     pthread_mutexattr_t attrs;
@@ -82,7 +91,7 @@ SharedMemory *attach_shm(int shmid) {
     if (sharedMemory == (void *)-1) {
         sprintf(log_buffer, "WORKER SHM: ERROR ATTACHING SHARED MEMORY\n");
         log_writer(log_buffer);
-        exit(EXIT_FAILURE);
+        raise(SIGINT);
     } else {
         sprintf(log_buffer, "WORKER %d ATTACHED TO SHARED MEMORY %d\n", getpid(), shmid);
         log_writer(log_buffer);
@@ -317,7 +326,7 @@ WorkerSHM *create_worker_queue(int nr_workers) {
     if (shmid == -1) {
         sprintf(log_buffer, "WORKER SHM: ERROR CREATING SHARED MEMORY\n");
         log_writer(log_buffer);
-        exit(EXIT_FAILURE);
+        raise(SIGINT);
     }
 
     // Attach the shared memory segment
@@ -325,7 +334,7 @@ WorkerSHM *create_worker_queue(int nr_workers) {
     if (worker_shm == (void *) -1) {
         sprintf(log_buffer, "WORKER SHM: ERROR ATTACHING SHARED MEMORY\n");
         log_writer(log_buffer);
-        exit(EXIT_FAILURE);
+        raise(SIGINT);
     }
 
     // Initialize the mutex and condition variable
@@ -362,7 +371,7 @@ WorkerSHM *attach_worker_queue(int shmid) {
     if (worker_shm == (void *)-1) {
         sprintf(log_buffer, "SHM: ERROR ATTACHING SHARED MEMORY\n");
         log_writer(log_buffer);
-        exit(EXIT_FAILURE);
+        raise(SIGINT);
     } else {
         sprintf(log_buffer, "WORKER %d ATTACHED TO QUEUE %d\n", getpid(), shmid);
         log_writer(log_buffer);
@@ -425,6 +434,7 @@ int dequeue_worker(WorkerSHM *worker_shm) {
     
     // Check if the queue is empty
     while (worker_shm->size == 0) {
+        if (sigint) return -1;
         pthread_cond_wait(&worker_shm->cond, &worker_shm->mutex);
     }
     

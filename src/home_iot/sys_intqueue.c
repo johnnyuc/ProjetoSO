@@ -9,6 +9,7 @@
 
 // System global variables [created in sys_manager.c]
 extern ConfigValues config_vals;
+extern volatile sig_atomic_t sigint;
 
 // Function to create internal queue
 Queue *create_queue() {
@@ -38,6 +39,10 @@ void enqueue(Queue *queue, char *data) {
     pthread_mutex_lock(&queue->mutex);
 
     while (queue->size >= config_vals.queue_size) {
+        if (sigint) {
+            pthread_mutex_unlock(&queue->mutex);
+            return;
+        }
         pthread_cond_wait(&queue->cond_full, &queue->mutex);
     }
     if (queue->size == 0) {
@@ -58,6 +63,10 @@ char *dequeue(Queue *queue) {
 
     // If queue is empty, wait for it to be filled
     while (queue->size == 0) {
+        if (sigint) {
+            pthread_mutex_unlock(&queue->mutex);
+            return NULL;
+        }
         pthread_cond_wait(&queue->cond_empty, &queue->mutex);
     }
 
