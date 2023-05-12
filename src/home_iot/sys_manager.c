@@ -94,7 +94,9 @@ void handle_signint(int sig) {
     while (node != NULL) {
         sprintf(log_buffer, "INTERNAL QUEUE HOLD: %s\n", node->data);
         log_writer(log_buffer);
+        QueueNode *temp = node;
         node = node->next;
+        free(temp);
     }
     remove_queue(intqueue);
 
