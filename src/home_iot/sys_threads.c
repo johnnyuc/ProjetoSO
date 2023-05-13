@@ -144,10 +144,13 @@ void *sensor_reader_function() {
         if (poll_result > 0 && (pfd.revents & POLLIN)) {
             ssize_t bytes_read = read(sensor_fd, buffer, READ_PIPE);
             if (bytes_read > 0) {
-                // Write to queue
-                strcpy(enqueuing, "SENSOR#"); // Add sensor prefix
-                strcat(enqueuing, buffer);
-                enqueue(intqueue, enqueuing);
+                char *token = strtok(buffer, "\n"); // tokenize buffer by newline
+                while (token != NULL) {
+                    // Write to queue
+                    sprintf(enqueuing, "SENSOR#%s", token); // Add sensor prefix
+                    enqueue(intqueue, enqueuing);
+                    token = strtok(NULL, "\n"); // get next token
+                }
             }
             memset(buffer, 0, READ_PIPE);
         } else if (poll_result > 0 && (pfd.revents & POLLHUP)) {
@@ -162,6 +165,7 @@ void *sensor_reader_function() {
             pfd.fd = sensor_fd;
         }
     }
+
     return NULL;
 }
 

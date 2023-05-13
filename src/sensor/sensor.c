@@ -56,7 +56,10 @@ char *pipe_format(char *msg, SensorArgs args, int value) {
     }
 
     // Append values to the message
-    pos += sprintf(msg+pos, "%s#%s#%d", args.sensor_id, args.key, value);
+    pos += sprintf(msg, "%s#%s#%d\n", args.sensor_id, args.key, value);
+
+    // Append the null terminator
+    msg[pos] = '\0';
 
     return msg;
 }
@@ -72,7 +75,7 @@ void sensor_run(SensorArgs args) {
         int value = (rand() % (args.max_value - args.min_value + 1)) + args.min_value;
         
         pipe_format(msg, args, value);
-        printf("SENDING: %s\n", msg); // Logging
+        printf("SENDING: %s", msg); // Logging
 
         // Write to pipe
         int write_code = write(sensor_fd, msg, strlen(msg));
